@@ -2404,6 +2404,22 @@ iid->Data4[4] = 0xC0;
 iid->Data4[5] = 0x20;
 iid->Data4[6] = 0x15;
 iid->Data4[7] = 0x6E;
+
+#if 0
+// IDirect3DTnLHalDevice
+iid->Data1 = 0xf5049e78;
+iid->Data2 = 0x4861;
+iid->Data3 = 0x11d2;
+iid->Data4[0] = 0xa4;
+iid->Data4[1] = 0x07;
+iid->Data4[2] = 0x00;
+iid->Data4[3] = 0xa0;
+iid->Data4[4] = 0xc9;
+iid->Data4[5] = 0x06;
+iid->Data4[6] = 0x29;
+iid->Data4[7] = 0xa8;
+#endif
+
   printf("\n\n\n\n\n\n\n  (planned iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n\n\n\n\n\n",
      iid->Data1, iid->Data2, iid->Data3,
      iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
