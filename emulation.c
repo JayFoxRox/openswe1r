@@ -261,14 +261,16 @@ OutHandler* outHandlers = NULL;
 static void outHookHandler(uc_engine *uc, uint32_t port, int size, uint32_t value, void *user_data) {
   int eip;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
-
+int c = 0;
   OutHandler* outHandler = outHandlers;
   while(outHandler != NULL) {
     if (outHandler->address == eip) {
       outHandler->callback(uc, outHandler->address, 0, outHandler->user_data);
     }
+c++;
     outHandler = outHandler->next;
   }
+printf("%d handlers\n", c);
 }
 
 void AddOutHandler(Address address, void(*callback)(void* uc, uint64_t address, uint32_t size, void* user_data), void* user_data) {
@@ -278,9 +280,6 @@ void AddOutHandler(Address address, void(*callback)(void* uc, uint64_t address, 
   outHandler->user_data = user_data;
   outHandler->next = outHandlers;
   outHandlers = outHandler;
-
-  uc_hook outHook;
-  uc_hook_add(uc, &outHook, UC_HOOK_INSN, outHookHandler, user_data, address, address, UC_X86_INS_OUT);
 
 #if 0
 #ifndef UC_KVM
@@ -343,6 +342,9 @@ void InitializeEmulation() {
     uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, UcErrorHook, NULL, 1, 0);
   }
 #endif
+
+  uc_hook outHook;
+  uc_hook_add(uc, &outHook, UC_HOOK_INSN, outHookHandler, NULL, 1, 0, UC_X86_INS_OUT);
 
 #ifndef UC_KVM
   // Setup segments
