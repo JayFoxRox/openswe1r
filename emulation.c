@@ -261,14 +261,16 @@ OutHandler* outHandlers = NULL;
 static void outHookHandler(uc_engine *uc, uint32_t port, int size, uint32_t value, void *user_data) {
   int eip;
   uc_reg_read(uc, UC_X86_REG_EIP, &eip);
-
+int c = 0;
   OutHandler* outHandler = outHandlers;
   while(outHandler != NULL) {
     if (outHandler->address == eip) {
       outHandler->callback(uc, outHandler->address, 0, outHandler->user_data);
     }
+c++;
     outHandler = outHandler->next;
   }
+printf("%d handlers\n", c);
 }
 
 void AddOutHandler(Address address, void(*callback)(void* uc, uint64_t address, uint32_t size, void* user_data), void* user_data) {
