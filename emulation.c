@@ -281,9 +281,6 @@ void AddOutHandler(Address address, void(*callback)(void* uc, uint64_t address, 
   outHandler->next = outHandlers;
   outHandlers = outHandler;
 
-  uc_hook outHook;
-  uc_hook_add(uc, &outHook, UC_HOOK_INSN, outHookHandler, user_data, address, address, UC_X86_INS_OUT);
-
 #if 0
 #ifndef UC_KVM
   CreateBreakpoint(address, callback, user_data);
@@ -345,6 +342,9 @@ void InitializeEmulation() {
     uc_hook_add(uc, &errorHooks[5], UC_HOOK_MEM_FETCH_PROT, UcErrorHook, NULL, 1, 0);
   }
 #endif
+
+  uc_hook outHook;
+  uc_hook_add(uc, &outHook, UC_HOOK_INSN, outHookHandler, NULL, 1, 0, UC_X86_INS_OUT);
 
 #ifndef UC_KVM
   // Setup segments
