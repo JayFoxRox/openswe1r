@@ -7,6 +7,8 @@
 
 extern uint32_t callId;
 
+extern Address clearEax;
+
 static inline int hacky_printf(const char* fmt, ...) {
 #if 1
   va_list args;
