@@ -5,11 +5,7 @@
 ### OpenSWE1R
 *An Open-Source port of the 1999 Game ["Star Wars: Episode 1 Racer"](https://en.wikipedia.org/wiki/Star_Wars_Episode_I:_Racer)*
 
-![Screenshot of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar)
 [![Screenshot of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar)](#ref)
-[![Screenshot of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar)](#)
-[![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/OpenSWE1R)
-[![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](#)
 
 ### Details
 
