@@ -359,6 +359,7 @@ static void LoadVertices(unsigned int vertexFormat, Address address, unsigned in
   glBufferData(GL_ARRAY_BUFFER, count * stride, Memory(address), GL_STREAM_DRAW);
 }
 
+bool depthMask;
 GLenum destBlend;
 GLenum srcBlend;
 uint32_t fogColor; // ARGB
@@ -429,6 +430,8 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ALPHA);
   }
 #endif
+
+  glDepthMask(depthMask ? GL_TRUE : GL_FALSE);
 
 #if 0
   // Wireframe mode
@@ -2038,10 +2041,36 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
-  hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  hacky_printf("e 0x%" PRIX32 "\n", stack[6]);
+  uint32_t d = stack[5];
+  uint32_t e = stack[6];
+  hacky_printf("d 0x%08" PRIX32 "\n", d);
+  hacky_printf("e 0x%" PRIX32 "\n", e);
 
   //SDL_GL_SwapWindow(sdlWindow);
+
+API(DDBLTFX)* bltfx = Memory(e);
+
+enum {
+  API(DDBLT_WAIT)      = 0x01000000l,
+  API(DDBLT_COLORFILL) = 0x00000400l
+};
+
+  if (d & API(DDBLT_WAIT)) {
+    // nop
+  }
+
+  if (d & API(DDBLT_COLORFILL)) {
+    printf("dwFillColor: 0x%08X\n", bltfx->dwFillColor);
+    glClearColor(((bltfx->dwFillColor >> 24) & 0xFF) / 255.0f,
+                 ((bltfx->dwFillColor >> 16) & 0xFF) / 255.0f,
+                 ((bltfx->dwFillColor >> 8) & 0xFF) / 255.0f,
+                 (bltfx->dwFillColor & 0xFF) / 255.0f); //FIXME: Alpha clear is a different flag I believe?!
+    glClear(GL_COLOR_BUFFER_BIT);
+  }
+
+glDepthMask(GL_TRUE);
+glClearDepthf(1.0f);
+glClear(GL_DEPTH_BUFFER_BIT);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 6 * 4;
@@ -2264,7 +2293,7 @@ HACKY_COM_BEGIN(IDirect3D3, 3)
     desc->dwSize = sizeof(API(D3DDEVICEDESC));
     desc->dwFlags = 0xFFFFFFFF;
 
-    desc->dwDeviceZBufferBitDepth = 24;
+    desc->dwDeviceZBufferBitDepth = 16;
 
 enum {
   API(D3DPTEXTURECAPS_PERSPECTIVE) =   0x00000001L,
@@ -2618,10 +2647,10 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
   uint32_t b = stack[3];
   switch(a) {
     case API(D3DRENDERSTATE_ZENABLE):
-      //FIXME
+      assert(b < 2);
       glSet(GL_DEPTH_TEST, b);
       // Hack: While Z is not correct, we can't turn on z-test
-      glDisable(GL_DEPTH_TEST);
+      //glDisable(GL_DEPTH_TEST);
       break;
 
     case API(D3DRENDERSTATE_FILLMODE):
@@ -2635,7 +2664,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
       break;
 
     case API(D3DRENDERSTATE_ZWRITEENABLE):
-      glDepthMask(b ? GL_TRUE : GL_FALSE);
+      depthMask = b;
       break;
 
     case API(D3DRENDERSTATE_ALPHATESTENABLE):
@@ -2658,6 +2687,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
 
     case API(D3DRENDERSTATE_ZFUNC):
       assert(b == 4);
+      glDepthFunc(GL_LEQUAL);
       //FIXME
       break;
 
@@ -2713,7 +2743,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 25)
       break;
     default:
       printf("Unknown matrix %d\n", a);
-      //FIXME: assert(false) once this runs faster
+      assert(false);
       break;
   }
   printf("Matrix %d:\n", a);
@@ -2911,6 +2941,8 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
   hacky_printf("e 0x%" PRIX32 "\n", stack[6]);
   hacky_printf("f 0x%" PRIX32 "\n", stack[7]);
+
+  assert(false);
 
   unsigned int rectCount = stack[2];
   API(D3DRECT)* rects = Memory(stack[3]);
