@@ -7,6 +7,8 @@
 
 [![Screenshot of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar)](#ref)
 
+![4k](https://4.bp.blogspot.com/-BHmsCqbWCQ4/VjCwAbFeWSI/AAAAAAAB3gA/ZlGhBPuRs7E/s0/Best_Autumn_Picture_2015_uhd.jpg)
+
 ### Details
 
 This project is a mix of console emulation and something like [WINE](https://www.winehq.org/).
