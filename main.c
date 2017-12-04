@@ -76,7 +76,7 @@ Export* LookupExportByOrdinal(const char* name, uint32_t ordinal) {
 
 const char** dirlisting = NULL;
 
-
+Address clearEax = 0;
 
 uint32_t tls[1000] = {0};
 
@@ -1533,7 +1533,24 @@ HACKY_IMPORT_BEGIN(FindFirstFileA)
   hacky_printf("lpFileName 0x%" PRIX32 " ('%s')\n", stack[1], pattern);
   hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
 //dwFileAttributes
-   if (!strcmp(".\\data\\player\\*.sav", pattern)) {
+  char* wildcard1 = strchr(pattern, '*');
+  char* wildcard2 = strchr(pattern, '?');
+  if ((wildcard1 == NULL) && (wildcard2 == NULL)) {
+    // It's asking explicitly for one file..
+    static char foundFile[128];
+    if ((pattern[0] == '.') && (pattern[1] == '\\')) {
+      pattern = &pattern[2];
+    } else {
+      assert(false);
+    }
+    strcpy(foundFile, pattern);
+    static const char* passthrough[] = {
+      ".", "..",
+      foundFile,
+      NULL
+    };
+    dirlisting = passthrough;
+  } else if (!strcmp(".\\data\\player\\*.sav", pattern)) {
     static const char* profiles[] = {
       ".", "..",
       "anakin.sav",
@@ -1884,6 +1901,9 @@ HACKY_COM_END()
 // IID_IDirectDraw4 -> STDMETHOD(EnumDisplayModes)( THIS_ DWORD, LPDDSURFACEDESC2, LPVOID, LPDDENUMMODESCALLBACK2 ) PURE; // 8
 HACKY_COM_BEGIN(IDirectDraw4, 8)
   hacky_printf("EnumDisplayModes\n");
+  uint32_t a = stack[2];
+  uint32_t b = stack[3];
+  uint32_t c = stack[4];
   Address d = stack[5];
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -1893,9 +1913,16 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention is PASCAL
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     esp -= 4;
-    *(uint32_t*)Memory(esp) = stack[4]; // user pointer
+    *(uint32_t*)Memory(esp) = c; // user pointer
+
     esp -= 4;
     Address descAddress = Allocate(sizeof(DDSURFACEDESC2));
     DDSURFACEDESC2* desc = Memory(descAddress);
@@ -1908,7 +1935,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
 
     // Emulate the call
     esp -= 4;
-    *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+    *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = d;
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
@@ -2271,6 +2298,7 @@ HACKY_COM_END()
 
 // IDirect3D3 -> STDMETHOD(EnumDevices)(THIS_ LPD3DENUMDEVICESCALLBACK,LPVOID) PURE; // 3
 HACKY_COM_BEGIN(IDirect3D3, 3)
+  hacky_printf("EnumDevices\n");
   uint32_t a = stack[2];
   uint32_t b = stack[3];
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
@@ -2279,6 +2307,12 @@ HACKY_COM_BEGIN(IDirect3D3, 3)
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention not specified -> stdcall?!
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     esp -= 4;
     *(uint32_t*)Memory(esp) = b; // lpContext
@@ -2360,7 +2394,7 @@ iid->Data4[7] = 0x6E;
 
     // Emulate the call
     esp -= 4;
-    *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+    *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = a;
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
@@ -2392,6 +2426,7 @@ HACKY_COM_END()
 
 // IDirect3D3 -> STDMETHOD(EnumZBufferFormats)(THIS_ REFCLSID,LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 10
 HACKY_COM_BEGIN(IDirect3D3, 10)
+  hacky_printf("EnumZBufferFormats\n");
   uint32_t b = stack[3];
   uint32_t c = stack[4];
   printf("p 0x%" PRIX32 "\n", stack[1]);
@@ -2401,6 +2436,12 @@ HACKY_COM_BEGIN(IDirect3D3, 10)
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 4 * 4;
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention not specified -> stdcall?!
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
     DDPIXELFORMAT* format = (DDPIXELFORMAT*)Memory(formatAddress);
@@ -2415,7 +2456,7 @@ HACKY_COM_BEGIN(IDirect3D3, 10)
 
     // Emulate the call
     esp -= 4;
-    *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+    *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = b;
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
@@ -2486,6 +2527,7 @@ HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(EnumTextureFormats)(THIS_ LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 8
 HACKY_COM_BEGIN(IDirect3DDevice3, 8)
+  hacky_printf("EnumTextureFormats\n");
   uint32_t a = stack[2];
   uint32_t b = stack[3];
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
@@ -2494,6 +2536,12 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention not specified -> stdcall?!
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     {
       Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
@@ -2512,8 +2560,9 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
 
+      // Emulate a call by setting return address to where we want to go.
       esp -= 4;
-      *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+      *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     }
     {
       Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
@@ -2532,6 +2581,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
 
+      // Emulate a call by setting return address to the callback.
       esp -= 4;
       *(uint32_t*)Memory(esp) = a; // Continue with next format
     }
@@ -2553,13 +2603,15 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
 
+      // Emulate the call. We are calling the callback.
+      // We also set the return address to the callback.
       esp -= 4;
       *(uint32_t*)Memory(esp) = a; // Continue with next format
+      eip = a;
     }
 #endif
 
-    // Emulate the call
-    eip = a;
+
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
@@ -3089,11 +3141,18 @@ HACKY_COM_END()
 HACKY_IMPORT_BEGIN(DirectDrawEnumerateA)
   Address lpCallback = stack[1];
   Address lpContext = stack[2];
-  hacky_printf("lpCallback 0x%" PRIX32 "\n", lpCallback);
+  hacky_printf("lpCallback 0x%" PRIX32 "\n", lpCallback); // LPDDENUMCALLBACKA
   hacky_printf("lpContext 0x%" PRIX32 "\n", lpContext);
   eax = 0; // HRESULT -> non-negative means success
   esp += 2 * 4;
+#if 1
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention is PASCAL
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     esp -= 4;
     *(uint32_t*)Memory(esp) = lpContext; // lpContext
@@ -3113,11 +3172,13 @@ HACKY_IMPORT_BEGIN(DirectDrawEnumerateA)
 
     // Emulate the call
     esp -= 4;
-    *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+    *(uint32_t*)Memory(esp) = clearEax;
     eip = lpCallback;
+
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
+#endif
 HACKY_IMPORT_END()
 
 
@@ -3173,14 +3234,20 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
   uint32_t b = stack[3];
   uint32_t c = stack[4];
   uint32_t d = stack[5];
-  hacky_printf("p1 0x%" PRIX32 "\n", a);
-  hacky_printf("p2 0x%" PRIX32 "\n", b);
-  hacky_printf("p3 0x%" PRIX32 "\n", c);
-  hacky_printf("p4 0x%" PRIX32 "\n", d);
+  hacky_printf("a 0x%" PRIX32 "\n", a);
+  hacky_printf("b 0x%" PRIX32 "\n", b);
+  hacky_printf("c 0x%" PRIX32 "\n", c);
+  hacky_printf("d 0x%" PRIX32 "\n", d);
   //FIXME: Do some callback stuff
   eax = 0; // HRESULT -> non-negative means success
   esp += 5 * 4;
   // Push a call to the callback onto the stack.. this is some ugly hack..
+
+  // Convention is PASCAL
+
+  esp -= 4;
+  *(uint32_t*)Memory(esp) = returnAddress;
+
   {
     esp -= 4;
     *(uint32_t*)Memory(esp) = c; // pvRef
@@ -3201,12 +3268,13 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     ddi->wUsage = 0; //FIXME look at usb spec?
 
     esp -= 4;
-    *(uint32_t*)Memory(esp) = ddiAddress; // LPDIENUMDEVICESCALLBACKA
+    *(uint32_t*)Memory(esp) = ddiAddress; // LPCDIDEVICEINSTANCEA
 
     // Emulate the call
     esp -= 4;
-    *(uint32_t*)Memory(esp) = returnAddress; // Return where this was supposed to return to
+    *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     eip = b;
+
     printf("  Callback at 0x%" PRIX32 "\n", eip);
     //FIXME: Add a hook which returns 0
   }
@@ -3665,16 +3733,23 @@ int main(int argc, char* argv[]) {
   }
   RelocateExe(exe);
 
+  clearEax = Allocate(3);
+  uint8_t* p = Memory(clearEax);
+  *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
+  *p++ = 0xC3;              // ret
+
 // 0x90 = nop (used to disable code)
 // 0xC3 = ret (used to skip function)
 // 0x84 = je (probably used to be `jne`, used to invert condition)
 // 0x75 = jne (probably used to be `je`, used to invert condition)
 
 // These functions access internal FILE* data I belive; crashes our emu
+#if 0
 *(uint8_t*)Memory(0x4A1670) = 0xC3; // _lock
 *(uint8_t*)Memory(0x4A16F0) = 0xC3; // _unlock
 *(uint8_t*)Memory(0x4A1710) = 0xC3; // _lock_file
 *(uint8_t*)Memory(0x4A1780) = 0xC3; // _unlock_file
+#endif
 
 #if 0 //FIXME FIXME FIXME FIXME FIXME
   // These do something bad internally
@@ -3685,18 +3760,13 @@ int main(int argc, char* argv[]) {
   CreateBreakpoint(0x48A230, UcTGAHook, "<TGAHook>");
 #endif
 
-
 #if 0
-uint8_t* patch = Memory(0x417010); // _get_fname:
-*patch++ = 0x31; *patch++ = 0xC0;  //   xor eax eax
-*patch++ = 0xC3;                   //   ret
-#endif
-
 *(uint8_t*)Memory(0x487d71) = 0x75; // Invert the check for eax after "DirectDrawEnumerate" (ours will always fail)
 *(uint8_t*)Memory(0x488ce2) = 0x75; // Invert the check for eax after "EnumDisplayModes" (ours will always fail)
 *(uint8_t*)Memory(0x489e20) = 0x75; // Invert the check for eax after "EnumDevices" [graphics] (ours will always fail)
 *(uint8_t*)Memory(0x48a013) = 0x84; // Invert the check for eax after "EnumTextureFormats" (ours will always fail)
 *(uint8_t*)Memory(0x485433) = 0x75; // Invert the check for eax after "EnumDevices" [input] (ours will always fail)
+#endif
 
 //memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
 

@@ -431,57 +431,65 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
     ioctl(u->vcpu_fd, KVM_RUN, 0);
     switch(u->run->exit_reason){
       case KVM_EXIT_IO: {
-        //FIXME: RIP?
-        int real_eip;
-        int original_eip;
-        uc_reg_read(u, UC_X86_REG_EIP, &original_eip);
-        real_eip = original_eip - 1; //FIXME: Check what instruction did the `OUT`
-        uc_reg_write(uc, UC_X86_REG_EIP, &real_eip);
-        uint64_t address = real_eip;
-        printf("Unhandled IO at 0x%016" PRIX64 "\n", address);
-        cbe* cb = u->cb_head;
-        while(cb != NULL) {
-          //printf("Matching 0x%016" PRIX64 "\n", cb->begin);
-          if ((address >= cb->begin) && (address <= cb->end)) {
-            printf("Matched!\n");
-            uint16_t size = u->run->io.size;
-            uint16_t port = u->run->io.port;
-            uint16_t count = u->run->io.count;
-            assert(count == 1);
-            if ((u->run->io.direction == KVM_EXIT_IO_OUT) && (cb->extra.insn == UC_X86_INS_OUT)) {
-              printf("Doing callback!\n");
-              int value;
-              if (size == 1) {
-                value = *(uint8_t*)((uintptr_t)u->run + u->run->io.data_offset);
+      }
+      case KVM_EXIT_HLT: {
+          //FIXME: RIP?
+          int real_eip;
+          int original_eip;
+          uc_reg_read(u, UC_X86_REG_EIP, &original_eip);
+          real_eip = original_eip - 1; //FIXME: Check what instruction did the `OUT`
+          uc_reg_write(uc, UC_X86_REG_EIP, &real_eip);
+          uint64_t address = real_eip;
+          printf("Unhandled IO at 0x%016" PRIX64 "\n", address);
+          cbe* cb = u->cb_head;
+          while(cb != NULL) {
+            //printf("Matching 0x%016" PRIX64 "\n", cb->begin);
+            if ((address >= cb->begin) && (address <= cb->end)) {
+              printf("Matched!\n");
+              uint16_t size = u->run->io.size;
+              uint16_t port = u->run->io.port;
+              uint16_t count = u->run->io.count;
+/*
+              assert(count == 1);
+              if ((u->run->io.direction == KVM_EXIT_IO_OUT) && (cb->extra.insn == UC_X86_INS_OUT)) {
+*/
+                printf("Doing callback!\n");
+/*
+                int value;
+                if (size == 1) {
+                  value = *(uint8_t*)((uintptr_t)u->run + u->run->io.data_offset);
+                } else {
+                  assert(false);
+                }
+*/
+                int value = 0;
+                void(*callback)(uc_engine *uc, uint32_t port, int size, uint32_t value, void *user_data) = cb->callback;
+                callback(uc, port, size, value, cb->user_data);
+             /*
+              } else if ((u->run->io.direction == KVM_EXIT_IO_IN) && (cb->extra.insn == UC_X86_INS_IN)) {
+                int(*callback)(uc_engine*) = cb->callback;
+                assert(false);
+                while(1);
+                int value = callback(uc);
+                //FIXME: writeback value
               } else {
                 assert(false);
               }
-              void(*callback)(uc_engine *uc, uint32_t port, int size, uint32_t value, void *user_data) = cb->callback;
-              callback(uc, port, size, value, cb->user_data);
-            } else if ((u->run->io.direction == KVM_EXIT_IO_IN) && (cb->extra.insn == UC_X86_INS_IN)) {
-              int(*callback)(uc_engine*) = cb->callback;
-              assert(false);
-              while(1);
-              int value = callback(uc);
-              //FIXME: writeback value
-            } else {
-              assert(false);
+*/
             }
+            cb = cb->next;
           }
-          cb = cb->next;
+          // Check if the callback changed EIP, if not, swap back
+          int eip;
+          uc_reg_read(u, UC_X86_REG_EIP, &eip);
+          if (eip == real_eip) {
+            uc_reg_write(u, UC_X86_REG_EIP, &original_eip);
+            assert(false);
+          } else {
+            printf("EIP switched from 0x%08X to 0x%08X\n", real_eip, eip);
+          }
+          break;
         }
-        // Check if the callback changed EIP, if not, swap back
-        int eip;
-        uc_reg_read(u, UC_X86_REG_EIP, &eip);
-        if (eip == real_eip) {
-          uc_reg_write(u, UC_X86_REG_EIP, &original_eip);
-          assert(false);
-        } else {
-          printf("EIP switched from 0x%08X to 0x%08X\n", real_eip, eip);
-        }
-        break;
-      }
-      case KVM_EXIT_HLT:
         printf("halted\n");
         printRegs(u);
         return -4;
