@@ -7,6 +7,9 @@
 uint64_t GetTimerFrequency();
 uint64_t GetTimerValue();
 
+void* aligned_malloc(size_t alignment, size_t size);
+void aligned_free(void* ptr);
+
 //FIXME: use these..
 typedef uint32_t Address;
 typedef uint32_t Size;

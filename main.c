@@ -138,7 +138,7 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
 
 
 Exe* exe; //FIXME: This is hack. I feel this shouldn't be exposed aside from the loader
-const char* exeName = "SWEP1RCR_newer_patch.EXE";
+const char* exeName = "swep1rcr.exe";
 
 static char* TranslatePath(const char* path) {
   char* newPath = malloc(strlen(path) + 1);
@@ -217,8 +217,7 @@ void LoadSection(Exe* exe, unsigned int sectionIndex) {
   PeSection* section = &exe->sections[sectionIndex];
 
   // Map memory for section
-  uint8_t* mem;
-  assert(posix_memalign((void **)&mem, 0x1000, section->virtualSize) == 0);
+  uint8_t* mem = aligned_malloc(0x1000, section->virtualSize);
 
   // Read data from exe and fill rest of space with zero
   fseek(exe->f, section->rawAddress, SEEK_SET);
@@ -594,7 +593,7 @@ HACKY_IMPORT_BEGIN(SetHandleCount)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(GetCommandLineA)
-  const char* cmd = "SWEP1RCR_newer_patch.EXE";
+  const char* cmd = "swep1rcr.exe";
   Address tmp = Allocate(strlen(cmd) + 1);
   strcpy((char*)Memory(tmp), cmd);
   eax = tmp;

@@ -17,6 +17,7 @@ typedef struct {
 } A3d4;
 
 
+#if 1
 typedef struct {
   uint16_t wFormatTag;
   uint16_t nChannels;
@@ -26,6 +27,7 @@ typedef struct {
   uint16_t wBitsPerSample;
   uint16_t cbSize;
 } WAVEFORMATEX;
+#endif
 
 typedef struct {
   void* vtable;

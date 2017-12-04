@@ -7,10 +7,14 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
-#if __STDC_NO_THREADS__
+#ifdef __STDC_NO_THREADS__
 #include "c11threads.h"
 #else
 #include <threads.h>
+#endif
+
+#if defined(_WIN32)
+#include <malloc.h>
 #endif
 
 #include "common.h"
@@ -71,6 +75,24 @@ typedef struct {
 //FIXME: MMX?
 } ThreadContext;
 ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
+
+void* aligned_malloc(size_t alignment, size_t size) {
+  void* ptr;
+#if defined(_WIN32)
+  ptr = _aligned_malloc(size, alignment);
+#else
+  posix_memalign(&ptr, alignment, size);
+#endif
+  return ptr;
+}
+
+void aligned_free(void* ptr) {
+#if defined(_WIN32)
+  _aligned_free(ptr);
+#else
+  free(ptr);
+#endif
+}
 
 static void TransferContext(ThreadContext* ctx, bool write) {
   uc_err(*transfer)(uc_engine*, int, void*) = write ? uc_reg_write : uc_reg_read;
@@ -345,8 +367,7 @@ void InitializeEmulation() {
 
 #ifndef UC_KVM
   // Setup segments
-  SegmentDescriptor* gdtEntries;
-  assert(posix_memalign((void**)&gdtEntries, ucAlignment, AlignUp(gdtSize, ucAlignment)) == 0);
+  SegmentDescriptor* gdtEntries = aligned_malloc(ucAlignment, AlignUp(gdtSize, ucAlignment));
   memset(gdtEntries, 0x00, gdtSize);
 
   gdtEntries[14] = CreateDescriptor(0x00000000, 0xFFFFF000, true);  // CS
@@ -396,13 +417,12 @@ void InitializeEmulation() {
 #endif
 
   // Map and set TLS (not exposed via flat memory)
-  uint8_t* tls;
-  assert(posix_memalign((void**)&tls, ucAlignment, tlsSize) == 0);
+  uint8_t* tls = aligned_malloc(ucAlignment, tlsSize);
   memset(tls, 0xBB, tlsSize);
   err = uc_mem_map_ptr(uc, tlsAddress, tlsSize, UC_PROT_WRITE | UC_PROT_READ, tls);
 
   // Allocate a heap
-  assert(posix_memalign((void **)&heap, ucAlignment, heapSize) == 0);
+  heap = aligned_malloc(ucAlignment, heapSize);
   memset(heap, 0xAA, heapSize);
   MapMemory(heap, heapAddress, heapSize, true, true, true);
 }
@@ -429,7 +449,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
   // Map and set stack
   //FIXME: Use requested size
   if (stack == NULL) {
-    assert(posix_memalign((void **)&stack, ucAlignment, stackSize) == 0);
+    stack = aligned_malloc(ucAlignment, stackSize);
     MapMemory(stack, stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;

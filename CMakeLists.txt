@@ -3,6 +3,11 @@ project(OpenSWE1R)
 
 set(CMAKE_C_STANDARD 11)
 
+# Fix a bug in msys mingw where C11 threads are not provided and the compiler doesn't tell us
+if(MINGW)
+  add_definitions(-D__STDC_NO_THREADS__=1)
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(Unicorn REQUIRED)
