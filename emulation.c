@@ -244,7 +244,7 @@ void CreateBreakpoint(uint32_t address, void* callback, void* user) {
 Address CreateOut() {
   Address code_address = Allocate(2);
   uint8_t* code = Memory(code_address);
-  *code++ = 0xEE; // OUT DX, AL
+  *code++ = 0xF4; // OUT DX, AL
   //FIXME: Are changes to regs even registered here?!
   *code++ = 0xC3; // End block with RET
   return code_address;

@@ -33,7 +33,7 @@ add_executable(openswe1r
   com/dplay.c
 )
 
-if(FALSE)
+if(TRUE)
   target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
   target_sources(openswe1r PUBLIC
     uc_kvm.c
