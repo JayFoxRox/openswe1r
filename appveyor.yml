@@ -41,7 +41,7 @@ install:
           mkdir C:\tools\vcpkg\ports\unicorn\
           Start-FileDownload 'https://raw.githubusercontent.com/JayFoxRox/vcpkg/unicorn-port/ports/unicorn/CONTROL' -FileName C:\tools\vcpkg\ports\unicorn\CONTROL
           Start-FileDownload 'https://raw.githubusercontent.com/JayFoxRox/vcpkg/unicorn-port/ports/unicorn/portfile.cmake' -FileName C:\tools\vcpkg\ports\unicorn\portfile.cmake
-          vcpkg install sdl2 glew openal-soft unicorn
+          vcpkg install sdl2 glew openal-soft unicorn pthreads
         }
 
 before_build:
