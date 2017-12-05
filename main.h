@@ -20,9 +20,23 @@ static inline int hacky_printf(const char* fmt, ...) {
 Address CreateInterface(const char* name, unsigned int slotCount);
 void AddExport(const char* name, void* callback, Address address);
 
+// Defines an INITIALIZER macro which will run code at startup
+#ifdef __GNUC__
+  #define INITIALIZER(_name) \
+    __attribute__((constructor)) static void _name()
+#elif defined(_MSC_VER)
+  #define INITIALIZER(_name) \
+    static void _name(); \
+    static int __ ## _name ## _f1() { _name(); return 0; } \
+    __pragma(data_seg(".CRT$XIU")) static int(*__ ## _name ## _f2)() = __ ## _name ## _f1; \
+    __pragma(data_seg()) static void _name()
+#else
+#error Compiler not detected
+#endif
+
 #define HACKY_IMPORT_BEGIN(_name) \
   static void Hook_ ## _name (void* uc, uint64_t address, uint32_t _size, void* user_data); \
-  __attribute__((constructor)) static void Register_ ## _name () { \
+  INITIALIZER(Register_ ## _name) { \
     const char* name = #_name; \
     printf("Registering hook for '%s'\n", name); \
     AddExport(name, Hook_ ## _name, 0); \
