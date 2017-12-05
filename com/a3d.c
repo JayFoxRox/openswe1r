@@ -17,7 +17,6 @@ typedef struct {
 } A3d4;
 
 
-#if 1
 typedef struct {
   uint16_t wFormatTag;
   uint16_t nChannels;
@@ -26,14 +25,13 @@ typedef struct {
   uint16_t nBlockAlign;
   uint16_t wBitsPerSample;
   uint16_t cbSize;
-} WAVEFORMATEX;
-#endif
+} MS(WAVEFORMATEX);
 
 typedef struct {
   void* vtable;
   ALuint al_source;
   ALuint al_buffer;
-  WAVEFORMATEX fmt;
+  MS(WAVEFORMATEX) fmt;
   Address data;
 } A3DSOURCE;
 
@@ -206,7 +204,7 @@ HACKY_COM_BEGIN(IA3d4, 0)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-  const IID* iid = (const IID*)Memory(stack[2]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[2]);
 
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
@@ -414,7 +412,7 @@ HACKY_COM_BEGIN(IA3dSource, 7)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
   A3DSOURCE* this = Memory(stack[1]);
-  memcpy(&this->fmt, Memory(stack[2]), sizeof(WAVEFORMATEX));
+  memcpy(&this->fmt, Memory(stack[2]), sizeof(MS(WAVEFORMATEX)));
 
   eax = 0;
   esp += 2 * 4;

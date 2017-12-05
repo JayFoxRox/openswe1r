@@ -5,20 +5,20 @@
 
 #include "emulation.h"
 
-typedef uint32_t DWORD;
-typedef void VOID;
+typedef uint32_t MS(DWORD);
+typedef void MS(VOID);
 
-typedef uint32_t UINT; // FIXME: Assumption
-typedef int16_t SHORT; // FIXME: Assumption
+typedef uint32_t MS(UINT); // FIXME: Assumption
+typedef int16_t MS(SHORT); // FIXME: Assumption
 
 typedef struct {
   uint32_t Data1;
   uint16_t Data2;
   uint16_t Data3;
   uint8_t Data4[8];
-} GUID;
-typedef GUID CLSID;
-typedef GUID IID;
+} MS(GUID);
+typedef MS(GUID) MS(CLSID);
+typedef MS(GUID) MS(IID);
 
 typedef struct {
   uint32_t bmType;
@@ -28,48 +28,50 @@ typedef struct {
   uint16_t bmPlanes;
   uint16_t bmBitsPixel;
   Address bmBits;
-} BITMAP;
+} MS(BITMAP);
 
-typedef DWORD COLORREF;
+typedef MS(DWORD) MS(COLORREF);
 
-typedef uint32_t SIZE_T;
+typedef uint32_t MS(SIZE_T);
 
 typedef struct {
-  DWORD dwLowDateTime;
-  DWORD dwHighDateTime;
-} FILETIME;
+  MS(DWORD) dwLowDateTime;
+  MS(DWORD) dwHighDateTime;
+} MS(FILETIME);
 
-#define MAX_PATH 260
+#define MS__MAX_PATH 260
 
-typedef char TCHAR;
+typedef char MS(TCHAR);
 typedef struct {
-  DWORD    dwFileAttributes;
-  FILETIME ftCreationTime;
-  FILETIME ftLastAccessTime;
-  FILETIME ftLastWriteTime;
-  DWORD    nFileSizeHigh;
-  DWORD    nFileSizeLow;
-  DWORD    dwReserved0;
-  DWORD    dwReserved1;
-  TCHAR    cFileName[MAX_PATH];
-  TCHAR    cAlternateFileName[14];
-} WIN32_FIND_DATA;
+  MS(DWORD)    dwFileAttributes;
+  MS(FILETIME) ftCreationTime;
+  MS(FILETIME) ftLastAccessTime;
+  MS(FILETIME) ftLastWriteTime;
+  MS(DWORD)    nFileSizeHigh;
+  MS(DWORD)    nFileSizeLow;
+  MS(DWORD)    dwReserved0;
+  MS(DWORD)    dwReserved1;
+  MS(TCHAR)    cFileName[MS(MAX_PATH)];
+  MS(TCHAR)    cAlternateFileName[14];
+} MS(WIN32_FIND_DATA);
 
 typedef struct {
   int x;
-} STR;
-typedef Address LPTSTR;
+} MS(STR);
+typedef Address MS(LPTSTR);
 
 
-#define VK_SHIFT 0x10
-#define VK_CONTROL 0x11
-#define VK_MENU 0x12
+#define MS__VK_SHIFT 0x10
+#define MS__VK_CONTROL 0x11
+#define MS__VK_MENU 0x12
 
-#define VK_LSHIFT 0xA0
-#define VK_RSHIFT 0xA1
-#define VK_LCONTROL 0xA2
-#define VK_RCONTROL 0xA3
-#define VK_LMENU 0xA4
-#define VK_RMENU 0xA5
+#define MS__VK_CAPITAL 0x14
+
+#define MS__VK_LSHIFT 0xA0
+#define MS__VK_RSHIFT 0xA1
+#define MS__VK_LCONTROL 0xA2
+#define MS__VK_RCONTROL 0xA3
+#define MS__VK_LMENU 0xA4
+#define MS__VK_RMENU 0xA5
 
 #endif

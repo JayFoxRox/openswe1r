@@ -49,12 +49,12 @@ typedef struct {
     uint32_t dwRGBZBitMask;
     uint32_t dwYUVZBitMask;
   };
-} DDPIXELFORMAT;
+} MS(DDPIXELFORMAT);
 
 
 typedef struct {
   uint32_t dwCaps;
-} DDSCAPS;
+} MS(DDSCAPS);
 
 
 typedef struct {
@@ -65,9 +65,9 @@ typedef struct {
     uint32_t dwCaps4;
     uint32_t dwVolumeDepth;
   };
-} DDSCAPS2;
+} MS(DDSCAPS2);
 
-#define DD_ROP_SPACE (256/32) // space required to store ROP array
+#define MS__DD_ROP_SPACE (256/32) // space required to store ROP array
 
 typedef struct {
   uint32_t    dwSize;
@@ -95,8 +95,8 @@ typedef struct {
   uint32_t    dwAlignBoundaryDest;
   uint32_t    dwAlignSizeDest;
   uint32_t    dwAlignStrideAlign;
-  uint32_t    dwRops[DD_ROP_SPACE];
-  DDSCAPS  ddsOldCaps;
+  uint32_t    dwRops[MS(DD_ROP_SPACE)];
+  MS(DDSCAPS) ddsOldCaps;
   uint32_t    dwMinOverlayStretch;
   uint32_t    dwMaxOverlayStretch;
   uint32_t    dwMinLiveVideoStretch;
@@ -109,15 +109,15 @@ typedef struct {
   uint32_t    dwSVBCaps;
   uint32_t    dwSVBCKeyCaps;
   uint32_t    dwSVBFXCaps;
-  uint32_t    dwSVBRops[DD_ROP_SPACE];
+  uint32_t    dwSVBRops[MS(DD_ROP_SPACE)];
   uint32_t    dwVSBCaps;
   uint32_t    dwVSBCKeyCaps;
   uint32_t    dwVSBFXCaps;
-  uint32_t    dwVSBRops[DD_ROP_SPACE];
+  uint32_t    dwVSBRops[MS(DD_ROP_SPACE)];
   uint32_t    dwSSBCaps;
   uint32_t    dwSSBCKeyCaps;
   uint32_t    dwSSBFXCaps;
-  uint32_t    dwSSBRops[DD_ROP_SPACE];
+  uint32_t    dwSSBRops[MS(DD_ROP_SPACE)];
   uint32_t    dwMaxVideoPorts;
   uint32_t    dwCurrVideoPorts;
   uint32_t    dwSVBCaps2;
@@ -125,17 +125,17 @@ typedef struct {
   uint32_t    dwNLVBCaps2;
   uint32_t    dwNLVBCKeyCaps;
   uint32_t    dwNLVBFXCaps;
-  uint32_t    dwNLVBRops[DD_ROP_SPACE];
-  DDSCAPS2 ddsCaps;
-} DDCAPS;
+  uint32_t    dwNLVBRops[MS(DD_ROP_SPACE)];
+  MS(DDSCAPS2) ddsCaps;
+} MS(DDCAPS);
 
-#define DDSCAPS_TEXTURE 0x00001000
-#define DDSCAPS_MIPMAP  0x00400000
+#define MS__DDSCAPS_TEXTURE 0x00001000
+#define MS__DDSCAPS_MIPMAP  0x00400000
 
 typedef struct {
   uint32_t dw1;
   uint32_t dw2;
-} DDCOLORKEY;
+} MS(DDCOLORKEY);
 
 typedef struct {
   uint32_t      dwSize;
@@ -159,27 +159,27 @@ typedef struct {
   uint32_t      dwReserved;
   Address     lpSurface;
   union {
-    DDCOLORKEY ddckCKDestOverlay;
+    MS(DDCOLORKEY) ddckCKDestOverlay;
     uint32_t      dwEmptyFaceColor;
   };
-  DDCOLORKEY ddckCKDestBlt;
-  DDCOLORKEY ddckCKSrcOverlay;
-  DDCOLORKEY ddckCKSrcBlt;
+  MS(DDCOLORKEY) ddckCKDestBlt;
+  MS(DDCOLORKEY) ddckCKSrcOverlay;
+  MS(DDCOLORKEY) ddckCKSrcBlt;
   union {
-    DDPIXELFORMAT ddpfPixelFormat;
+    MS(DDPIXELFORMAT) ddpfPixelFormat;
     uint32_t         dwFVF;
   };
-  DDSCAPS2   ddsCaps;
+  MS(DDSCAPS2)   ddsCaps;
   uint32_t      dwTextureStage;
-} DDSURFACEDESC2;
+} MS(DDSURFACEDESC2);
 
-#define DDPF_ALPHAPIXELS 0x00000001
-#define DDPF_RGB         0x00000040
+#define MS__DDPF_ALPHAPIXELS 0x00000001
+#define MS__DDPF_RGB         0x00000040
 
 typedef struct {
   void* vtable;
   Address texture; // Direct3DTexture2*
-  DDSURFACEDESC2 desc;
-} DirectDrawSurface4;
+  MS(DDSURFACEDESC2) desc;
+} MS(DirectDrawSurface4);
 
 #endif

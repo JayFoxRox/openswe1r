@@ -949,14 +949,14 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   hacky_printf("dwClsContext 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("riid 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("ppv 0x%" PRIX32 "\n", stack[5]);
-  const CLSID* clsid = (const CLSID*)Memory(stack[1]);
+  const MS(CLSID)* clsid = (const MS(CLSID)*)Memory(stack[1]);
   char clsidString[1024];
   sprintf(clsidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
           clsid->Data1, clsid->Data2, clsid->Data3,
           clsid->Data4[0], clsid->Data4[1], clsid->Data4[2], clsid->Data4[3],
           clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7]);
   printf("  (read clsid: {%s})\n", clsidString);
-  const IID* iid = (const IID*)Memory(stack[4]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[4]);
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
           iid->Data1, iid->Data2, iid->Data3,
@@ -969,14 +969,14 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   //FIXME: Add more classed / interfaces
 
   if (!strcmp(clsidString, "2FE8F810-B2A5-11D0-A787-0000F803ABFC")) {
-    // DEFINE_GUID(CLSID_DirectPlayLobby, 0x2fe8f810, 0xb2a5, 0x11d0, 0xa7, 0x87, 0x0, 0x0, 0xf8, 0x3, 0xab, 0xfc);
+    // DEFINE_GUID(MS(CLSID)_DirectPlayLobby, 0x2fe8f810, 0xb2a5, 0x11d0, 0xa7, 0x87, 0x0, 0x0, 0xf8, 0x3, 0xab, 0xfc);
     if (!strcmp(iidString, "2DB72491-652C-11D1-A7A8-0000F803ABFC")) {
       strcpy(name, "IDirectPlayLobby3A");
     } else {
       assert(false);
     }
   } else if (!strcmp(clsidString, "D7B70EE0-4340-11CF-B063-0020AFC2CD35")) {
-    // DEFINE_GUID(CLSID_DirectDraw, 0xD7B70EE0,0x4340,0x11CF,0xB0,0x63,0x00,0x20,0xAF,0xC2,0xCD,0x35);
+    // DEFINE_GUID(MS(CLSID)_DirectDraw, 0xD7B70EE0,0x4340,0x11CF,0xB0,0x63,0x00,0x20,0xAF,0xC2,0xCD,0x35);
     if (!strcmp(iidString, "9C59509A-39BD-11D1-8C4A-00C04FD930C5")) {
       strcpy(name, "IDirectDraw4");
     } else {
@@ -1138,8 +1138,8 @@ HACKY_IMPORT_BEGIN(LoadImageA)
     ILint height = ilGetInteger(IL_IMAGE_HEIGHT);
     printf("Loaded %d x %d texture\n", width, height);
 
-    Address bitmapAddress = Allocate(sizeof(BITMAP));
-    BITMAP* bitmap = (BITMAP*)Memory(bitmapAddress);
+    Address bitmapAddress = Allocate(sizeof(MS(BITMAP)));
+    MS(BITMAP)* bitmap = (MS(BITMAP)*)Memory(bitmapAddress);
 
     bitmap->bmType = 0; //FIXME
     bitmap->bmWidth = width;
@@ -1208,7 +1208,7 @@ HACKY_IMPORT_BEGIN(StretchBlt)
 
   // Get the pointer to the object the DC points at, we'll assume that it is a BITMAP
   Address objectAddress = *(Address*)Memory(stack[6]);
-  BITMAP* bitmap = Memory(objectAddress);
+  MS(BITMAP)* bitmap = Memory(objectAddress);
   void* data = Memory(bitmap->bmBits);
 
   // Update the texture interface
@@ -1564,7 +1564,7 @@ HACKY_IMPORT_BEGIN(FindFirstFileA)
   }
 
   if (*dirlisting) {
-    WIN32_FIND_DATA* data = Memory(stack[2]);
+    MS(WIN32_FIND_DATA)* data = Memory(stack[2]);
     data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
     sprintf(data->cFileName, "%s", *dirlisting);
     dirlisting++;
@@ -1581,7 +1581,7 @@ HACKY_IMPORT_BEGIN(FindNextFileA)
   hacky_printf("lpFindFileData 0x%" PRIX32 "\n", stack[2]);
 
   if (*dirlisting) {
-    WIN32_FIND_DATA* data = Memory(stack[2]);
+    MS(WIN32_FIND_DATA)* data = Memory(stack[2]);
     data->dwFileAttributes = strchr(*dirlisting,'.') ? 0x80 : 0x10; // FILE_ATTRIBUTE_NORMAL or FILE_ATTRIBUTE_DIRECTORY
     sprintf(data->cFileName, "%s", *dirlisting);
     dirlisting++;
@@ -1605,12 +1605,12 @@ HACKY_IMPORT_END()
 // Name entry screen
 
 HACKY_IMPORT_BEGIN(GetKeyState)
-  SHORT pressed = 0x8000; // high order bit = pressed
-  SHORT toggled = 0x0001; // low order bit = toggled
-  SHORT returnValue = 0; // default: unpressed
+  MS(SHORT) pressed = 0x8000; // high order bit = pressed
+  MS(SHORT) toggled = 0x0001; // low order bit = toggled
+  MS(SHORT) returnValue = 0; // default: unpressed
   int nVirtKey = stack[1];
   switch(nVirtKey) {
-    case 0x14: // VK_CAPITAL
+    case MS(VK_CAPITAL):
       returnValue = 0;
       break;
     default:
@@ -1621,21 +1621,21 @@ HACKY_IMPORT_BEGIN(GetKeyState)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(MapVirtualKeyA)
-  UINT uCode = stack[1];
-  UINT uMapType = stack[2];
+  MS(UINT) uCode = stack[1];
+  MS(UINT) uMapType = stack[2];
 
   hacky_printf("uCode 0x%" PRIX32 "\n", uCode);
   hacky_printf("uMapType 0x%" PRIX32 "\n", uMapType);
 
-  UINT returnValue = 0; // 0 = no map
+  MS(UINT) returnValue = 0; // 0 = no map
   switch(uMapType) {
     case 1: // MAPVK_VSC_TO_VK: uCode is a scan code and is translated into a virtual-key code that does not distinguish between left- and right-hand keys. If there is no translation, the function returns 0.
-      if (uCode == VK_LSHIFT || uCode == VK_RSHIFT) {
-        returnValue = VK_SHIFT;
-      } else if (uCode == VK_LCONTROL || uCode == VK_RCONTROL) {
-        returnValue = VK_CONTROL;
-      } else if (uCode == VK_LMENU || uCode == VK_RMENU) {
-        returnValue = VK_MENU;
+      if (uCode == MS(VK_LSHIFT) || uCode == MS(VK_RSHIFT)) {
+        returnValue = MS(VK_SHIFT);
+      } else if (uCode == MS(VK_LCONTROL) || uCode == MS(VK_RCONTROL)) {
+        returnValue = MS(VK_CONTROL);
+      } else if (uCode == MS(VK_LMENU) || uCode == MS(VK_RMENU)) {
+        returnValue = MS(VK_MENU);
       } else {
         returnValue = uCode; // FIXME: is this okay?
       }
@@ -1788,15 +1788,15 @@ HACKY_COM_END()
 
 
 
-// IID_IDirectDraw4
+// MS(IID)_IDirectDraw4
 
 
-// IID_IDirectDraw4 -> STDMETHOD(QueryInterface) (THIS_ REFIID riid, LPVOID FAR * ppvObj) PURE; // 0
+// MS(IID)_IDirectDraw4 -> STDMETHOD(QueryInterface) (THIS_ REFMS(IID) riid, LPVOID FAR * ppvObj) PURE; // 0
 HACKY_COM_BEGIN(IDirectDraw4, 0)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("riid 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("ppvObj 0x%" PRIX32 "\n", stack[3]);
-  const IID* iid = (const IID*)Memory(stack[2]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[2]);
 
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
@@ -1820,14 +1820,14 @@ HACKY_COM_BEGIN(IDirectDraw4, 0)
   esp += 3 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD_(ULONG,Release) (THIS) PURE; // 2
+// MS(IID)_IDirectDraw4 -> STDMETHOD_(ULONG,Release) (THIS) PURE; // 2
 HACKY_COM_BEGIN(IDirectDraw4, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(CreatePalette)(THIS_ DWORD, LPPALETTEENTRY, LPDIRECTDRAWPALETTE FAR*, IUnknown FAR * ) PURE; // 5
+// MS(IID)_IDirectDraw4 -> STDMETHOD(CreatePalette)(THIS_ DWORD, LPPALETTEENTRY, LPDIRECTDRAWPALETTE FAR*, IUnknown FAR * ) PURE; // 5
 HACKY_COM_BEGIN(IDirectDraw4, 5)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -1839,7 +1839,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 5)
   esp += 5 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(CreateSurface)(THIS_  LPDDSURFACEDESC2, LPDIRECTDRAWSURFACE4 FAR *, IUnknown FAR *) PURE; // 6
+// MS(IID)_IDirectDraw4 -> STDMETHOD(CreateSurface)(THIS_  LPDDSURFACEDESC2, LPDIRECTDRAWSURFACE4 FAR *, IUnknown FAR *) PURE; // 6
 HACKY_COM_BEGIN(IDirectDraw4, 6)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -1847,11 +1847,11 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
 
   Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
-  DirectDrawSurface4* surface = (DirectDrawSurface4*)Memory(surfaceAddress);
+  MS(DirectDrawSurface4)* surface = (MS(DirectDrawSurface4)*)Memory(surfaceAddress);
 
   *(Address*)Memory(stack[3]) = surfaceAddress;
 
-  DDSURFACEDESC2* desc = (DDSURFACEDESC2*)Memory(stack[2]);
+  MS(DDSURFACEDESC2)* desc = (MS(DDSURFACEDESC2)*)Memory(stack[2]);
 
   printf("dwSize = %" PRIu32 "\n", desc->dwSize);
   printf("dwFlags = 0x%08" PRIX32 "\n", desc->dwFlags);
@@ -1869,17 +1869,17 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
   printf("ddpfPixelFormat.dwRGBAlphaBitMask = 0x%08" PRIX32 "\n", desc->ddpfPixelFormat.dwRGBAlphaBitMask);
 
 
-  memcpy(&surface->desc, desc, sizeof(DDSURFACEDESC2));
+  memcpy(&surface->desc, desc, sizeof(MS(DDSURFACEDESC2)));
 
-  #define DDSD_PITCH 0x00000008l
+  #define MS__DDSD_PITCH 0x00000008l
 
-  surface->desc.dwFlags = DDSD_PITCH;
+  surface->desc.dwFlags = MS(DDSD_PITCH);
   surface->desc.lPitch = surface->desc.dwWidth * desc->ddpfPixelFormat.dwRGBBitCount / 8;
 
-  if (desc->ddsCaps.dwCaps & DDSCAPS_TEXTURE) {
+  if (desc->ddsCaps.dwCaps & MS(DDSCAPS_TEXTURE)) {
     // FIXME: Delay this until the interface is queried the first time?!
     surface->texture = CreateInterface("IDirect3DTexture2", 20);
-    Direct3DTexture2* texture = (Direct3DTexture2*)Memory(surface->texture);
+    MS(Direct3DTexture2)* texture = (MS(Direct3DTexture2)*)Memory(surface->texture);
     texture->surface = surfaceAddress;
     glGenTextures(1, &texture->handle);
     printf("GL handle is %d\n", texture->handle);
@@ -1888,7 +1888,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
     surface->texture = CreateInterface("invalid", 200);
 
     //FIXME: WTF is this shit?!
-    Direct3DTexture2* texture = (Direct3DTexture2*)Memory(surface->texture);
+    MS(Direct3DTexture2)* texture = (MS(Direct3DTexture2)*)Memory(surface->texture);
     glGenTextures(1, &texture->handle);
     //assert(false);
   }
@@ -1897,7 +1897,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 6)
   esp += 4 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(EnumDisplayModes)( THIS_ DWORD, LPDDSURFACEDESC2, LPVOID, LPDDENUMMODESCALLBACK2 ) PURE; // 8
+// MS(IID)_IDirectDraw4 -> STDMETHOD(EnumDisplayModes)( THIS_ DWORD, LPDDSURFACEDESC2, LPVOID, LPDDENUMMODESCALLBACK2 ) PURE; // 8
 HACKY_COM_BEGIN(IDirectDraw4, 8)
   hacky_printf("EnumDisplayModes\n");
   uint32_t a = stack[2];
@@ -1923,14 +1923,14 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
     *(uint32_t*)Memory(esp) = c; // user pointer
 
     esp -= 4;
-    Address descAddress = Allocate(sizeof(DDSURFACEDESC2));
-    DDSURFACEDESC2* desc = Memory(descAddress);
-    desc->ddpfPixelFormat.dwFlags = DDPF_RGB;
+    Address descAddress = Allocate(sizeof(MS(DDSURFACEDESC2)));
+    MS(DDSURFACEDESC2)* desc = Memory(descAddress);
+    desc->ddpfPixelFormat.dwFlags = MS(DDPF_RGB);
     desc->ddpfPixelFormat.dwRGBBitCount = 24;
     desc->dwWidth = 640;
     desc->dwHeight = 480;
     desc->lpSurface = 0x01010101;
-    *(uint32_t*)Memory(esp) = descAddress; // DDSURFACEDESC2*
+    *(uint32_t*)Memory(esp) = descAddress; // MS(DDSURFACEDESC2)*
 
     // Emulate the call
     esp -= 4;
@@ -1941,7 +1941,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 8)
   }
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(FlipToGDISurface)(THIS) PURE; // 10
+// MS(IID)_IDirectDraw4 -> STDMETHOD(FlipToGDISurface)(THIS) PURE; // 10
 HACKY_COM_BEGIN(IDirectDraw4, 10)
   hacky_printf("FlipToGDISurface\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
@@ -1952,7 +1952,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 10)
   esp += 1 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(GetCaps)( THIS_ LPDDCAPS, LPDDCAPS) PURE; // 11
+// MS(IID)_IDirectDraw4 -> STDMETHOD(GetCaps)( THIS_ LPDDCAPS, LPDDCAPS) PURE; // 11
 HACKY_COM_BEGIN(IDirectDraw4, 11)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]); // HAL
@@ -1966,10 +1966,10 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
 // (+60)
 
 #if 1
-  DDCAPS* halCaps = Memory(stack[2]);
-  DDCAPS* swCaps = Memory(stack[3]);
+  MS(DDCAPS)* halCaps = Memory(stack[2]);
+  MS(DDCAPS)* swCaps = Memory(stack[3]);
 
-  printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(DDCAPS));
+  printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(MS(DDCAPS)));
 
   halCaps->dwCaps = 0x00000001;
   halCaps->dwCaps2 = 0x00080000;
@@ -1982,7 +1982,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
   esp += 3 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(Initialize)(THIS_ GUID FAR *) PURE; // 18
+// MS(IID)_IDirectDraw4 -> STDMETHOD(Initialize)(THIS_ GUID FAR *) PURE; // 18
 HACKY_COM_BEGIN(IDirectDraw4, 18)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -1990,14 +1990,14 @@ HACKY_COM_BEGIN(IDirectDraw4, 18)
   esp += 2 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 ->    STDMETHOD(RestoreDisplayMode)(THIS) PURE; // 19
+// MS(IID)_IDirectDraw4 ->    STDMETHOD(RestoreDisplayMode)(THIS) PURE; // 19
 HACKY_COM_BEGIN(IDirectDraw4, 19)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(SetCooperativeLevel)(THIS_ HWND, DWORD) PURE; // 20
+// MS(IID)_IDirectDraw4 -> STDMETHOD(SetCooperativeLevel)(THIS_ HWND, DWORD) PURE; // 20
 HACKY_COM_BEGIN(IDirectDraw4, 20)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -2006,7 +2006,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 20)
   esp += 3 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(SetDisplayMode)(THIS_ DWORD, DWORD,DWORD, DWORD, DWORD) PURE; // 21
+// MS(IID)_IDirectDraw4 -> STDMETHOD(SetDisplayMode)(THIS_ DWORD, DWORD,DWORD, DWORD, DWORD) PURE; // 21
 HACKY_COM_BEGIN(IDirectDraw4, 21)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -2018,7 +2018,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 21)
   esp += 6 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS2, LPDWORD, LPDWORD) PURE; // 23
+// MS(IID)_IDirectDraw4 -> STDMETHOD(GetAvailableVidMem)(THIS_ LPDDSCAPS2, LPDWORD, LPDWORD) PURE; // 23
 HACKY_COM_BEGIN(IDirectDraw4, 23)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -2028,7 +2028,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 23)
   esp += 4 * 4;
 HACKY_COM_END()
 
-// IID_IDirectDraw4 -> STDMETHOD(GetDeviceIdentifier)(THIS_ LPDDDEVICEIDENTIFIER, DWORD ) PURE; // 27
+// MS(IID)_IDirectDraw4 -> STDMETHOD(GetDeviceIdentifier)(THIS_ LPDDDEVICEIDENTIFIER, DWORD ) PURE; // 27
 HACKY_COM_BEGIN(IDirectDraw4, 27)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -2046,13 +2046,13 @@ HACKY_COM_END()
 
 // IDirectDrawSurface4
 
-// IDirectDrawSurface4 -> STDMETHOD(QueryInterface) (THIS_ REFIID riid, LPVOID FAR * ppvObj) PURE; // 0
+// IDirectDrawSurface4 -> STDMETHOD(QueryInterface) (THIS_ REFMS(IID) riid, LPVOID FAR * ppvObj) PURE; // 0
 HACKY_COM_BEGIN(IDirectDrawSurface4, 0)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  DirectDrawSurface4* this = (DirectDrawSurface4*)Memory(stack[1]);
-  const IID* iid = (const IID*)Memory(stack[2]);
+  MS(DirectDrawSurface4)* this = (MS(DirectDrawSurface4)*)Memory(stack[1]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[2]);
   printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
          iid->Data1, iid->Data2, iid->Data3,
          iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
@@ -2135,18 +2135,18 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  DDSCAPS2* caps = (DDSCAPS2*)Memory(stack[2]);
+  MS(DDSCAPS2)* caps = (MS(DDSCAPS2)*)Memory(stack[2]);
 
   printf("dwCaps = 0x%08" PRIX32 "\n", caps->dwCaps);
 
-  if (caps->dwCaps & DDSCAPS_MIPMAP) {
+  if (caps->dwCaps & MS(DDSCAPS_MIPMAP)) {
     //FIXME: This is probably BAD!
     printf("Redirecting to itself\n");
     *(Address*)Memory(stack[3]) = stack[1];
   } else {
     printf("Creating new dummy surface\n");
     Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
-    DirectDrawSurface4* surface = (DirectDrawSurface4*)Memory(surfaceAddress);
+    MS(DirectDrawSurface4)* surface = (MS(DirectDrawSurface4)*)Memory(surfaceAddress);
     surface->texture = 0;
     *(Address*)Memory(stack[3]) = surfaceAddress;
   }
@@ -2160,9 +2160,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 17)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  DirectDrawSurface4* this = (DirectDrawSurface4*)Memory(stack[1]);
+  MS(DirectDrawSurface4)* this = (MS(DirectDrawSurface4)*)Memory(stack[1]);
   if (this->texture != 0) {
-    Direct3DTexture2* texture = (Direct3DTexture2*)Memory(this->texture);
+    MS(Direct3DTexture2)* texture = (MS(Direct3DTexture2)*)Memory(this->texture);
     printf("Returning GL tex handle %d\n", texture->handle);
     *(Address*)Memory(stack[2]) = texture->handle;
   } else {
@@ -2179,7 +2179,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 22)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  DDSURFACEDESC2* desc = (DDSURFACEDESC2*)Memory(stack[2]);
+  MS(DDSURFACEDESC2)* desc = (MS(DDSURFACEDESC2)*)Memory(stack[2]);
   //FIXME?!  
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -2194,7 +2194,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
 
-  DirectDrawSurface4* this = (DirectDrawSurface4*)Memory(stack[1]);
+  MS(DirectDrawSurface4)* this = (MS(DirectDrawSurface4)*)Memory(stack[1]);
 
   assert(stack[2] == 0);
   assert(stack[5] == 0);
@@ -2205,8 +2205,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
     memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
   }
 
-  DDSURFACEDESC2* desc = Memory(stack[3]);
-  memcpy(desc, &this->desc, sizeof(DDSURFACEDESC2));
+  MS(DDSURFACEDESC2)* desc = Memory(stack[3]);
+  memcpy(desc, &this->desc, sizeof(MS(DDSURFACEDESC2)));
   
   printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
 #if 0
@@ -2236,11 +2236,11 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
 
   assert(stack[2] == 0);
 
-  DirectDrawSurface4* this = (DirectDrawSurface4*)Memory(stack[1]);
+  MS(DirectDrawSurface4)* this = (MS(DirectDrawSurface4)*)Memory(stack[1]);
 
-  DDSURFACEDESC2* desc = &this->desc;
+  MS(DDSURFACEDESC2)* desc = &this->desc;
 
-  Direct3DTexture2* texture = (Direct3DTexture2*)Memory(this->texture);
+  MS(Direct3DTexture2)* texture = (MS(Direct3DTexture2)*)Memory(this->texture);
 
   GLint previousTexture = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
@@ -2316,10 +2316,10 @@ HACKY_COM_BEGIN(IDirect3D3, 3)
     esp -= 4;
     *(uint32_t*)Memory(esp) = b; // lpContext
 
-    Address desc_addr = Allocate(sizeof(D3DDEVICEDESC));
-    D3DDEVICEDESC* desc = (D3DDEVICEDESC*)Memory(desc_addr);
-    memset(desc, 0x00, sizeof(D3DDEVICEDESC));
-    desc->dwSize = sizeof(D3DDEVICEDESC);
+    Address desc_addr = Allocate(sizeof(MS(D3DDEVICEDESC)));
+    MS(D3DDEVICEDESC)* desc = (MS(D3DDEVICEDESC)*)Memory(desc_addr);
+    memset(desc, 0x00, sizeof(MS(D3DDEVICEDESC)));
+    desc->dwSize = sizeof(MS(D3DDEVICEDESC));
     desc->dwFlags = 0xFFFFFFFF;
 
     desc->dwDeviceZBufferBitDepth = 24;
@@ -2369,9 +2369,9 @@ HACKY_COM_BEGIN(IDirect3D3, 3)
 
     // Used as parameter in Direct Draw `Initialize`
     esp -= 4;
-    Address guid_addr = Allocate(sizeof(IID));
-    IID* guid = (IID*)Memory(guid_addr);
-IID* iid = guid;
+    Address guid_addr = Allocate(sizeof(MS(IID)));
+    MS(IID)* guid = (MS(IID)*)Memory(guid_addr);
+MS(IID)* iid = guid;
 
 // IDirect3DHALDevice
 iid->Data1 = 0x84E63DE0;
@@ -2411,7 +2411,7 @@ HACKY_COM_BEGIN(IDirect3D3, 6)
   esp += 3 * 4;
 HACKY_COM_END()
 
-// IDirect3D3 -> STDMETHOD(CreateDevice)(THIS_ REFCLSID,LPDIRECTDRAWSURFACE4,LPDIRECT3DDEVICE3*,LPUNKNOWN) PURE; // 8
+// IDirect3D3 -> STDMETHOD(CreateDevice)(THIS_ REFMS(CLSID),LPDIRECTDRAWSURFACE4,LPDIRECT3DDEVICE3*,LPUNKNOWN) PURE; // 8
 HACKY_COM_BEGIN(IDirect3D3, 8)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
@@ -2423,7 +2423,7 @@ HACKY_COM_BEGIN(IDirect3D3, 8)
   esp += 5 * 4;
 HACKY_COM_END()
 
-// IDirect3D3 -> STDMETHOD(EnumZBufferFormats)(THIS_ REFCLSID,LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 10
+// IDirect3D3 -> STDMETHOD(EnumZBufferFormats)(THIS_ REFMS(CLSID),LPD3DENUMPIXELFORMATSCALLBACK,LPVOID) PURE; // 10
 HACKY_COM_BEGIN(IDirect3D3, 10)
   hacky_printf("EnumZBufferFormats\n");
   uint32_t b = stack[3];
@@ -2442,16 +2442,16 @@ HACKY_COM_BEGIN(IDirect3D3, 10)
   *(uint32_t*)Memory(esp) = returnAddress;
 
   {
-    Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
-    DDPIXELFORMAT* format = (DDPIXELFORMAT*)Memory(formatAddress);
-    format->dwSize = sizeof(DDPIXELFORMAT);
+    Address formatAddress = Allocate(sizeof(MS(DDPIXELFORMAT)));
+    MS(DDPIXELFORMAT)* format = (MS(DDPIXELFORMAT)*)Memory(formatAddress);
+    format->dwSize = sizeof(MS(DDPIXELFORMAT));
     format->dwFlags = 0x400; // DDPF_ZBUFFER;
     format->dwZBufferBitDepth = 16;
 
     esp -= 4;
     *(uint32_t*)Memory(esp) = c; // user pointer
     esp -= 4;
-    *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
+    *(uint32_t*)Memory(esp) = formatAddress; // MS(DDPIXELFORMAT)*
 
     // Emulate the call
     esp -= 4;
@@ -2476,13 +2476,13 @@ HACKY_COM_END()
 
 
 
-// IDirect3DDevice3 -> STDMETHOD(QueryInterface)(THIS_ REFIID riid, LPVOID * ppvObj) PURE; // 0
+// IDirect3DDevice3 -> STDMETHOD(QueryInterface)(THIS_ REFMS(IID) riid, LPVOID * ppvObj) PURE; // 0
 HACKY_COM_BEGIN(IDirect3DDevice3, 0)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  DirectDrawSurface4* this = (DirectDrawSurface4*)Memory(stack[1]);
-  const IID* iid = (const IID*)Memory(stack[2]);
+  MS(DirectDrawSurface4)* this = (MS(DirectDrawSurface4)*)Memory(stack[1]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[2]);
   printf("  (read iid: {%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "})\n",
      iid->Data1, iid->Data2, iid->Data3,
      iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
@@ -2543,11 +2543,11 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
 
   {
     {
-      Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
-      DDPIXELFORMAT* format = (DDPIXELFORMAT*)Memory(formatAddress);
-      memset(format, 0x00, sizeof(DDPIXELFORMAT));
-      format->dwSize = sizeof(DDPIXELFORMAT);
-      format->dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
+      Address formatAddress = Allocate(sizeof(MS(DDPIXELFORMAT)));
+      MS(DDPIXELFORMAT)* format = (MS(DDPIXELFORMAT)*)Memory(formatAddress);
+      memset(format, 0x00, sizeof(MS(DDPIXELFORMAT)));
+      format->dwSize = sizeof(MS(DDPIXELFORMAT));
+      format->dwFlags = MS(DDPF_RGB) | MS(DDPF_ALPHAPIXELS);
       format->dwRGBBitCount = 16;
       format->dwRBitMask = 0x0F00;
       format->dwGBitMask = 0x00F0;
@@ -2557,18 +2557,18 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = b; // user pointer
       esp -= 4;
-      *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
+      *(uint32_t*)Memory(esp) = formatAddress; // MS(DDPIXELFORMAT)*
 
       // Emulate a call by setting return address to where we want to go.
       esp -= 4;
       *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
     }
     {
-      Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
-      DDPIXELFORMAT* format = (DDPIXELFORMAT*)Memory(formatAddress);
-      memset(format, 0x00, sizeof(DDPIXELFORMAT));
-      format->dwSize = sizeof(DDPIXELFORMAT);
-      format->dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
+      Address formatAddress = Allocate(sizeof(MS(DDPIXELFORMAT)));
+      MS(DDPIXELFORMAT)* format = (MS(DDPIXELFORMAT)*)Memory(formatAddress);
+      memset(format, 0x00, sizeof(MS(DDPIXELFORMAT)));
+      format->dwSize = sizeof(MS(DDPIXELFORMAT));
+      format->dwFlags = MS(DDPF_RGB) | MS(DDPF_ALPHAPIXELS);
       format->dwRGBBitCount = 16;
       format->dwRBitMask = 0x7C00;
       format->dwGBitMask = 0x03E0;
@@ -2578,7 +2578,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = b; // user pointer
       esp -= 4;
-      *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
+      *(uint32_t*)Memory(esp) = formatAddress; // MS(DDPIXELFORMAT)*
 
       // Emulate a call by setting return address to the callback.
       esp -= 4;
@@ -2586,11 +2586,11 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
     }
 #if 1
     {
-      Address formatAddress = Allocate(sizeof(DDPIXELFORMAT));
-      DDPIXELFORMAT* format = (DDPIXELFORMAT*)Memory(formatAddress);
-      memset(format, 0x00, sizeof(DDPIXELFORMAT));
-      format->dwSize = sizeof(DDPIXELFORMAT);
-      format->dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
+      Address formatAddress = Allocate(sizeof(MS(DDPIXELFORMAT)));
+      MS(DDPIXELFORMAT)* format = (MS(DDPIXELFORMAT)*)Memory(formatAddress);
+      memset(format, 0x00, sizeof(MS(DDPIXELFORMAT)));
+      format->dwSize = sizeof(MS(DDPIXELFORMAT));
+      format->dwFlags = MS(DDPF_RGB) | MS(DDPF_ALPHAPIXELS);
       format->dwRGBBitCount = 32;
       format->dwRBitMask = 0x00FF0000;
       format->dwGBitMask = 0x0000FF00;
@@ -2600,7 +2600,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 8)
       esp -= 4;
       *(uint32_t*)Memory(esp) = b; // user pointer
       esp -= 4;
-      *(uint32_t*)Memory(esp) = formatAddress; // DDPIXELFORMAT*
+      *(uint32_t*)Memory(esp) = formatAddress; // MS(DDPIXELFORMAT)*
 
       // Emulate the call. We are calling the callback.
       // We also set the return address to the callback.
@@ -2646,11 +2646,11 @@ static void glSet(GLenum state, bool set) {
   }
 }
 
-GLenum mapBlend(D3DBLEND blend) {
+GLenum mapBlend(MS(D3DBLEND) blend) {
   switch(blend) {
-  case D3DBLEND_SRCALPHA:
+  case MS(D3DBLEND_SRCALPHA):
     return GL_SRC_ALPHA;
-  case D3DBLEND_INVSRCALPHA:
+  case MS(D3DBLEND_INVSRCALPHA):
     return GL_ONE_MINUS_SRC_ALPHA;
   default:
     assert(false);
@@ -2669,78 +2669,78 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
   uint32_t a = stack[2];
   uint32_t b = stack[3];
   switch(a) {
-    case D3DRS_ZENABLE:
+    case MS(D3DRENDERSTATE_ZENABLE):
       //FIXME
       glSet(GL_DEPTH_TEST, b);
       // Hack: While Z is not correct, we can't turn on z-test
       glDisable(GL_DEPTH_TEST);
       break;
 
-    case D3DRS_FILLMODE:
+    case MS(D3DRENDERSTATE_FILLMODE):
       assert(b == 3);
       //FIXME
       break;
 
-    case D3DRS_SHADEMODE:
+    case MS(D3DRENDERSTATE_SHADEMODE):
       assert(b == 2);
       //FIXME
       break;
 
-    case D3DRS_ZWRITEENABLE:
+    case MS(D3DRENDERSTATE_ZWRITEENABLE):
       glDepthMask(b ? GL_TRUE : GL_FALSE);
       break;
 
-    case D3DRS_ALPHATESTENABLE:
+    case MS(D3DRENDERSTATE_ALPHATESTENABLE):
       //FIXME: Does not exist in GL 3.3 anymore
       //glSet(GL_ALPHA_TEST, b);
       break;
 
-    case D3DRS_SRCBLEND:
+    case MS(D3DRENDERSTATE_SRCBLEND):
       srcBlend = mapBlend(b);
       break;
 
-    case D3DRS_DESTBLEND:
+    case MS(D3DRENDERSTATE_DESTBLEND):
       destBlend = mapBlend(b);
       break;
 
-    case D3DRS_CULLMODE:
+    case MS(D3DRENDERSTATE_CULLMODE):
       assert(b == 1);
       //FIXME
       break;
 
-    case D3DRS_ZFUNC:
+    case MS(D3DRENDERSTATE_ZFUNC):
       assert(b == 4);
       //FIXME
       break;
 
-    case D3DRS_ALPHAFUNC:
+    case MS(D3DRENDERSTATE_ALPHAFUNC):
       assert(b == 6);
       //FIXME
       break;
 
-    case D3DRS_DITHERENABLE:
+    case MS(D3DRENDERSTATE_DITHERENABLE):
       glSet(GL_DITHER, b);
       break;
 
-    case D3DRS_ALPHABLENDENABLE:
+    case MS(D3DRENDERSTATE_ALPHABLENDENABLE):
       glSet(GL_BLEND, b);
       break;
 
     //FIXME: Is this a bug? there doesn't seem to be lighting..
-    case D3DRS_SPECULARENABLE:
+    case MS(D3DRENDERSTATE_SPECULARENABLE):
       //FIXME
       break;
 
-    case D3DRENDERSTATE_FOGENABLE:
+    case MS(D3DRENDERSTATE_FOGENABLE):
       fogEnable = b;
       break;
-    case D3DRS_FOGCOLOR:
+    case MS(D3DRENDERSTATE_FOGCOLOR):
       fogColor = b;
       break;
-    case D3DRS_FOGSTART:
+    case MS(D3DRENDERSTATE_FOGTABLESTART):
       fogStart = *(float*)&b;
       break;
-    case D3DRS_FOGEND:
+    case MS(D3DRENDERSTATE_FOGTABLEEND):
       fogEnd = *(float*)&b;
       break;
     default:
@@ -2826,7 +2826,7 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 38)
   hacky_printf("b 0x%" PRIX32 "\n", b);
 
   if (b != 0) {
-    Direct3DTexture2* texture = Memory(b);
+    MS(Direct3DTexture2)* texture = Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
   } else {
@@ -2860,14 +2860,14 @@ HACKY_COM_END()
 
 // IDirect3DTexture2
 
-// IDirect3DTexture2 -> STDMETHOD(QueryInterface)				(THIS_ REFIID, LPVOID FAR *) PURE; // 0
+// IDirect3DTexture2 -> STDMETHOD(QueryInterface)				(THIS_ REFMS(IID), LPVOID FAR *) PURE; // 0
 HACKY_COM_BEGIN(IDirect3DTexture2, 0)
   hacky_printf("QueryInterface\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
-  const IID* iid = (const IID*)Memory(stack[2]);
+  const MS(IID)* iid = (const MS(IID)*)Memory(stack[2]);
 
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
@@ -2880,7 +2880,7 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 0)
   //FIXME: Add more classed / interfaces
 
   if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
-    Direct3DTexture2* this = Memory(stack[1]);
+    MS(Direct3DTexture2)* this = Memory(stack[1]);
     *(Address*)Memory(stack[3]) = this->surface;
   } else {
     assert(false);
@@ -2913,8 +2913,8 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 5)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  Direct3DTexture2* this = Memory(stack[1]);
-  Direct3DTexture2* a = Memory(stack[2]);
+  MS(Direct3DTexture2)* this = Memory(stack[1]);
+  MS(Direct3DTexture2)* a = Memory(stack[2]);
   //FIXME: Dirty hack..
   this->handle = a->handle;
   eax = 0; // FIXME: No idea what this expects to return..
@@ -2939,8 +2939,8 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IDirect3DViewport3, 17)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  D3DVIEWPORT2* vp = (D3DVIEWPORT2*)Memory(stack[2]);
-  assert(vp->dwSize == sizeof(D3DVIEWPORT2));
+  MS(D3DVIEWPORT2)* vp = (MS(D3DVIEWPORT2)*)Memory(stack[2]);
+  assert(vp->dwSize == sizeof(MS(D3DVIEWPORT2)));
   printf("- w:%" PRIu32 " h:%" PRIu32 ", zrange: %f %f\n", vp->dwWidth, vp->dwHeight, vp->dvMinZ, vp->dvMaxZ);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
@@ -2957,13 +2957,13 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
   hacky_printf("f 0x%" PRIX32 "\n", stack[7]);
 
   unsigned int rectCount = stack[2];
-  D3DRECT* rects = Memory(stack[3]);
+  MS(D3DRECT)* rects = Memory(stack[3]);
 
   glEnable(GL_SCISSOR_TEST);
   GLint viewport[4];
   glGetIntegerv(GL_VIEWPORT, viewport);
   for(unsigned int i = 0; i < rectCount; i++) {
-    D3DRECT* rect = &rects[i];
+    MS(D3DRECT)* rect = &rects[i];
     //FIXME: Clip to viewport..
     int width = rect->x2 - rect->x1;
     int height = rect->y2 -  rect->y1;
@@ -2982,9 +2982,9 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
     glClearStencil(stencilValue);
     glClearDepth(zValue);
     glClearColor(r, g, b, a);
-    glClear(((flags & D3DCLEAR_TARGET) ? GL_COLOR_BUFFER_BIT : 0) |
-            ((flags & D3DCLEAR_ZBUFFER) ? GL_DEPTH_BUFFER_BIT : 0) |
-            ((flags & D3DCLEAR_STENCIL) ? GL_STENCIL_BUFFER_BIT : 0));
+    glClear(((flags & MS(D3DCLEAR_TARGET)) ? GL_COLOR_BUFFER_BIT : 0) |
+            ((flags & MS(D3DCLEAR_ZBUFFER)) ? GL_DEPTH_BUFFER_BIT : 0) |
+            ((flags & MS(D3DCLEAR_STENCIL)) ? GL_STENCIL_BUFFER_BIT : 0));
   }
   glDisable(GL_SCISSOR_TEST);
 
@@ -3051,13 +3051,13 @@ void UpdateKeyboardState() {
   const uint8_t pressed = 0x80; // This is the only requirement for pressed keys
   const uint8_t unpressed = 0x00;
   memset(keyboardState, 0x00, 256);
-  keyboardState[DIK_ESCAPE] = sdlState[SDL_SCANCODE_ESCAPE] ? pressed : unpressed;
-  keyboardState[DIK_RETURN] = sdlState[SDL_SCANCODE_RETURN] ? pressed : unpressed;
-  keyboardState[DIK_SPACE] = sdlState[SDL_SCANCODE_SPACE] ? pressed : unpressed;
-  keyboardState[DIK_UP] = sdlState[SDL_SCANCODE_UP] ? pressed : unpressed;
-  keyboardState[DIK_DOWN] = sdlState[SDL_SCANCODE_DOWN] ? pressed : unpressed;
-  keyboardState[DIK_LEFT] = sdlState[SDL_SCANCODE_LEFT] ? pressed : unpressed;
-  keyboardState[DIK_RIGHT] = sdlState[SDL_SCANCODE_RIGHT] ? pressed : unpressed;
+  keyboardState[MS(DIK_ESCAPE)] = sdlState[SDL_SCANCODE_ESCAPE] ? pressed : unpressed;
+  keyboardState[MS(DIK_RETURN)] = sdlState[SDL_SCANCODE_RETURN] ? pressed : unpressed;
+  keyboardState[MS(DIK_SPACE)] = sdlState[SDL_SCANCODE_SPACE] ? pressed : unpressed;
+  keyboardState[MS(DIK_UP)] = sdlState[SDL_SCANCODE_UP] ? pressed : unpressed;
+  keyboardState[MS(DIK_DOWN)] = sdlState[SDL_SCANCODE_DOWN] ? pressed : unpressed;
+  keyboardState[MS(DIK_LEFT)] = sdlState[SDL_SCANCODE_LEFT] ? pressed : unpressed;
+  keyboardState[MS(DIK_RIGHT)] = sdlState[SDL_SCANCODE_RIGHT] ? pressed : unpressed;
 }
 
 // IDirectInputDeviceA -> STDMETHOD(GetDeviceState)(THIS_ DWORD,LPVOID) PURE; // 9
@@ -3091,11 +3091,11 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   printf("max count is %d\n", max_count);
   *count = 0;
   unsigned int objectSize = stack[2];
-  assert(objectSize == sizeof(DIDEVICEOBJECTDATA));
+  assert(objectSize == sizeof(MS(DIDEVICEOBJECTDATA)));
   for(unsigned int i = 0; i < 256; i++) {
     if (keyboardState[i] != previousState[i]) {
       if (*count < max_count) {
-        DIDEVICEOBJECTDATA objectData;
+        MS(DIDEVICEOBJECTDATA) objectData;
         memset(&objectData, 0x00, sizeof(objectData));
         objectData.dwOfs = i;
         objectData.dwData = keyboardState[i];
@@ -3251,15 +3251,15 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     esp -= 4;
     *(uint32_t*)Memory(esp) = c; // pvRef
 
-    Address ddiAddress = Allocate(sizeof(DIDEVICEINSTANCEA));
-    DIDEVICEINSTANCEA* ddi = Memory(ddiAddress);
-    memset(ddi, 0x00, sizeof(DIDEVICEINSTANCEA));
+    Address ddiAddress = Allocate(sizeof(MS(DIDEVICEINSTANCEA)));
+    MS(DIDEVICEINSTANCEA)* ddi = Memory(ddiAddress);
+    memset(ddi, 0x00, sizeof(MS(DIDEVICEINSTANCEA)));
 
-    ddi->dwSize = sizeof(DIDEVICEINSTANCEA);
+    ddi->dwSize = sizeof(MS(DIDEVICEINSTANCEA));
     //FIXME:    GUID guidInstance;
     //FIXME:    GUID guidProduct;
-    #define DIDEVTYPE_KEYBOARD          3
-    ddi->dwDevType = DIDEVTYPE_KEYBOARD; // or something
+    #define MS__DIDEVTYPE_KEYBOARD          3
+    ddi->dwDevType = MS(DIDEVTYPE_KEYBOARD); // or something
     sprintf(ddi->tszInstanceName, "OpenSWE1R Keyboard 1"); // TCHAR tszInstanceName[MAX_PATH];
     sprintf(ddi->tszProductName, "OpenSWE1R Keyboard"); // TCHAR tszProductName[MAX_PATH];
     //FIXME:    GUID guidFFDriver;
@@ -3476,11 +3476,11 @@ Exe* LoadExe(const char* path) {
     uint32_t relocationRva = exe->peHeader.imageBase + exe->dataDirectories[5].virtualAddress;
     uint32_t remainingSize = exe->dataDirectories[5].size;
 
-    while(remainingSize >= sizeof(IMAGE_BASE_RELOCATION)) {
-      IMAGE_BASE_RELOCATION* baseRelocation = Memory(relocationRva);
-      assert(baseRelocation->sizeOfBlock >= sizeof(IMAGE_BASE_RELOCATION));
+    while(remainingSize >= sizeof(MS(IMAGE_BASE_RELOCATION))) {
+      MS(IMAGE_BASE_RELOCATION)* baseRelocation = Memory(relocationRva);
+      assert(baseRelocation->sizeOfBlock >= sizeof(MS(IMAGE_BASE_RELOCATION)));
 
-      unsigned int relocationCount = (baseRelocation->sizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / 2;
+      unsigned int relocationCount = (baseRelocation->sizeOfBlock - sizeof(MS(IMAGE_BASE_RELOCATION))) / 2;
       printf("Base relocation: 0x%" PRIX32 " (%d relocations)\n", baseRelocation->virtualAddress, relocationCount);
       uint16_t* relocations = Memory(relocationRva);
       for(unsigned int i = 0; i < relocationCount; i++) {
@@ -3516,11 +3516,11 @@ Exe* LoadExe(const char* path) {
     uint32_t remainingSize = exe->dataDirectories[1].size;
     printf("Import table located at 0x%" PRIX32 "\n", importRva);
     //FIXME: Should be done differently. Import table expects zero element at end which is not checked yet! (it's optional here)
-    while(remainingSize >= sizeof(IMAGE_IMPORT_DESCRIPTOR)) {
+    while(remainingSize >= sizeof(MS(IMAGE_IMPORT_DESCRIPTOR))) {
 
       // Access import and check if it is valid
-      IMAGE_IMPORT_DESCRIPTOR* imports = Memory(importRva);
-      if (IsZero(imports, sizeof(IMAGE_IMPORT_DESCRIPTOR))) {
+      MS(IMAGE_IMPORT_DESCRIPTOR)* imports = Memory(importRva);
+      if (IsZero(imports, sizeof(MS(IMAGE_IMPORT_DESCRIPTOR)))) {
         break;
       }
 
@@ -3545,7 +3545,7 @@ Exe* LoadExe(const char* path) {
           label = malloc(128);
           sprintf(label, "<%s@%d>", name, ordinal);
         } else {
-          IMAGE_IMPORT_BY_NAME* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
+          MS(IMAGE_IMPORT_BY_NAME)* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
           printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
           label = importByName->name;
         }
@@ -3604,8 +3604,8 @@ Exe* LoadExe(const char* path) {
       }
 
       // Jump to next entry
-      importRva += sizeof(IMAGE_IMPORT_DESCRIPTOR);
-      remainingSize -= sizeof(IMAGE_IMPORT_DESCRIPTOR);
+      importRva += sizeof(MS(IMAGE_IMPORT_DESCRIPTOR));
+      remainingSize -= sizeof(MS(IMAGE_IMPORT_DESCRIPTOR));
     }
   }
 
