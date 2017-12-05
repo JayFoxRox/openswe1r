@@ -25,13 +25,17 @@ void AddExport(const char* name, void* callback, Address address);
   #define INITIALIZER(_name) \
     __attribute__((constructor)) static void _name()
 #elif defined(_MSC_VER)
-  #define INITIALIZER(_name) \
-    static void _name(); \
-    static int __ ## _name ## _f1() { _name(); return 0; } \
-    __pragma(data_seg(".CRT$XIU")) static int(*__ ## _name ## _f2)() = __ ## _name ## _f1; \
-    __pragma(data_seg()) static void _name()
+  #if (_MSC_VER >= 1400)
+    #define INITIALIZER(_name) \
+      static void _name(); \
+      static int __ ## _name ## _caller() { _name(); return 0; } \
+      __declspec(allocate(".CRT$XIU")) static int(*__ ## _name ## _pointer)() = __ ## _name ## _caller; \
+      static void _name()
+  #else
+    #error Compiler not supported
+  #endif
 #else
-#error Compiler not detected
+  #error Compiler not detected
 #endif
 
 #define HACKY_IMPORT_BEGIN(_name) \
