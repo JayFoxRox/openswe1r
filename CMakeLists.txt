@@ -3,8 +3,8 @@ project(OpenSWE1R)
 
 set(CMAKE_C_STANDARD 11)
 
-# Fix a bug in msys mingw where C11 threads are not provided and the compiler doesn't tell us
-if(MINGW)
+# Some compilers don't provide C11 threads but don't tell us about that
+if(MINGW OR MSVC)
   add_definitions(-D__STDC_NO_THREADS__=1)
 endif()
 
