@@ -81,8 +81,12 @@ uint32_t tls[1000] = {0};
 #include "shaders.h"
 #include "shader.h"
 
-
+#ifdef _MSC_VER
+#define usleep(x)
+#else
 #include <unistd.h> // Hack for debug sleep
+#endif
+
 #include "windows.h" // Hack while exports are not ready
 // HACK:
 #include <unicorn/unicorn.h>
@@ -160,9 +164,19 @@ uint64_t GetTimerFrequency() {
 
 //FIXME: Automaticly use frequency
 uint64_t GetTimerValue() {
-  struct timespec monotime;
-  clock_gettime(CLOCK_MONOTONIC, &monotime);
-  return monotime.tv_sec * 1000ULL + monotime.tv_nsec / 1000000ULL;
+#ifdef _MSC_VER
+	LARGE_INTEGER count;
+	LARGE_INTEGER frequency;
+	QueryPerformanceCounter(&count);
+	QueryPerformanceFrequency(&frequency);
+	count.QuadPart *= 1000000ULL;
+	count.QuadPart /= frequency.QuadPart;
+	return count.QuadPart;
+#else
+	struct timespec monotime;
+	clock_gettime(CLOCK_MONOTONIC, &monotime);
+	return monotime.tv_sec * 1000ULL + monotime.tv_nsec / 1000000ULL;
+#endif
 }
 
 void StackTrace(uint32_t base, unsigned int frames, unsigned int arguments) {

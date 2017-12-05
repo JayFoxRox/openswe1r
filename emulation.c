@@ -7,10 +7,12 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
+#if 0
 #ifdef __STDC_NO_THREADS__
 #include "c11threads.h"
 #else
 #include <threads.h>
+#endif
 #endif
 
 #if defined(_WIN32)
@@ -38,7 +40,7 @@ static uint32_t stackSize = 16 * 1024 * 1024; // 4 MiB stack should be PLENTY
 
 #define HEAP_ADDRESS 0x0D000000
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 2048 * 1024 * 1024; // 2048 MiB
+static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
@@ -486,15 +488,24 @@ static int SliceThread(void* userData) {
     //FIXME: Disabled because it caused crashes
     //uc_emu_stop(uc);
     //thrd_sleep(&(struct timespec){.tv_nsec=500*1000*1000}, NULL);
+#if 0
     thrd_sleep(&(struct timespec){.tv_sec=5}, NULL);
+#endif
   }
 }
 
 void RunEmulation() {
   uc_err err;
 
+#if 0
   thrd_t sliceThread;
   int tret = thrd_create(&sliceThread, SliceThread, NULL);
+#endif
+
+  //FIXME: create slice thread
+#if _MSC_VER
+#else
+#endif
 
   //FIXME: plenty of options to optimize in single threaded mode.. (register readback not necessary etc.)
   while(GetThreadCount() > 0) {
@@ -537,7 +548,10 @@ void RunEmulation() {
     printf("\n\n\n\n\n");
   }
   
+  //FIXME: Join thread?
+#if 0
   tret = thrd_join(sliceThread, NULL);
+#endif
 
 }
 
