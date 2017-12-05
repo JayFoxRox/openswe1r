@@ -26,6 +26,7 @@ void AddExport(const char* name, void* callback, Address address);
     __attribute__((constructor)) static void _name()
 #elif defined(_MSC_VER)
   #if (_MSC_VER >= 1400)
+    #pragma section(".CRT$XIU",long,read)
     #define INITIALIZER(_name) \
       static void _name(); \
       static int __ ## _name ## _caller() { _name(); return 0; } \
