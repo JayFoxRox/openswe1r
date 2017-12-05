@@ -62,5 +62,5 @@ build_script:
           C:\msys64\usr\bin\bash.exe -lc 'mingw32-make -C mingw_build/ 2>&1'
         } else {
           # https://www.appveyor.com/docs/build-phase
-          # msbuild msvc_build/openswe1r.sln /maxcpucount /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+          msbuild msvc_build/openswe1r.sln /maxcpucount /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
         }
