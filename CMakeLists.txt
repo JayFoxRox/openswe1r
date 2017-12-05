@@ -6,6 +6,11 @@ option(USE_VM "Use hardware virtualization backend for Unicorn-Engine" OFF)
 
 set(CMAKE_C_STANDARD 11)
 
+# Fix a bug in msys mingw where C11 threads are not provided and the compiler doesn't tell us
+if(MINGW)
+  add_definitions(-D__STDC_NO_THREADS__=1)
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(Unicorn REQUIRED)
