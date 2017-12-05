@@ -52,7 +52,7 @@ before_build:
           C:\msys64\usr\bin\bash.exe -lc "cmake -G 'MSYS Makefiles' -DCMAKE_BUILD_TYPE=Release .. 2>&1"
         } else {
           # redirect stderr and change the exit code to prevent powershell from cancelling the build if cmake prints a warning
-          cmd /C 'cmake -G "Visual Studio 15 2017 Win64" -DCMAKE_TOOLCHAIN_FILE=C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake .. 2>&1 && exit 0'
+          # cmd /C 'cmake -G "Visual Studio 15 2017 Win64" -DCMAKE_TOOLCHAIN_FILE=C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake .. 2>&1 && exit 0'
         }
   - cd ..
 
@@ -62,5 +62,5 @@ build_script:
           C:\msys64\usr\bin\bash.exe -lc 'mingw32-make -C mingw_build/ 2>&1'
         } else {
           # https://www.appveyor.com/docs/build-phase
-          msbuild msvc_build/openswe1r.sln /maxcpucount /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+          # msbuild msvc_build/openswe1r.sln /maxcpucount /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
         }
