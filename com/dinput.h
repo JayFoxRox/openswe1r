@@ -9,7 +9,7 @@
 #include "../emulation.h"
 
 typedef struct {
-  const API(GUID) *pguid;
+  const Address pguid; // const GUID*
   API(DWORD)   dwOfs;
   API(DWORD)   dwType;
   API(DWORD)   dwFlags;
@@ -49,6 +49,30 @@ typedef struct {
 #endif
 } API(DIDEVICEOBJECTDATA);
 
+typedef struct {
+    API(DWORD)   dwSize;
+    API(DWORD)   dwFlags;
+    API(DWORD)   dwDevType;
+    API(DWORD)   dwAxes;
+    API(DWORD)   dwButtons;
+    API(DWORD)   dwPOVs;
+#if(API__DIRECTINPUT_VERSION >= 0x0500)
+    API(DWORD)   dwFFSamplePeriod;
+    API(DWORD)   dwFFMinTimeResolution;
+    API(DWORD)   dwFirmwareRevision;
+    API(DWORD)   dwHardwareRevision;
+    API(DWORD)   dwFFDriverVersion;
+#endif /* DIRECTINPUT_VERSION >= 0x0500 */
+} API(DIDEVCAPS);
+
+
+#define API__DIDEVTYPEMOUSE_UNKNOWN          1
+#define API__DIDEVTYPEKEYBOARD_UNKNOWN       0
+#define API__DIDEVTYPEJOYSTICK_UNKNOWN       1
+
+#define API__DIDEVTYPE_MOUSE          2
+#define API__DIDEVTYPE_KEYBOARD       3
+#define API__DIDEVTYPE_JOYSTICK       4
 
 // From Microsoft DX6 SDK headers
 
@@ -223,6 +247,20 @@ enum {
  *  Alternate names for keys originally not used on US keyboards.
  */
   API(DIK_CIRCUMFLEX) =      API(DIK_PREVTRACK)        /* Japanese keyboard */
+};
+
+typedef struct {
+  void* vtable;
+  bool version2;
+  enum {
+    Keyboard, Mouse, Joystick
+  } type;
+  SDL_Joystick* joystick;
+} API(DirectInputDeviceA);
+
+enum {
+  API(DIDF_ABSAXIS) =            0x00000001,
+  API(DIDF_RELAXIS) =            0x00000002
 };
 
 #endif

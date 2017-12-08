@@ -1545,6 +1545,7 @@ HACKY_IMPORT_END()
 
 // Name entry screen
 
+#if 0
 HACKY_IMPORT_BEGIN(GetKeyState)
   API(SHORT) pressed = 0x8000; // high order bit = pressed
   API(SHORT) toggled = 0x0001; // low order bit = toggled
@@ -1596,8 +1597,7 @@ HACKY_IMPORT_BEGIN(MapVirtualKeyA)
   eax = returnValue;
   esp += 2 * 4;
 HACKY_IMPORT_END()
-
-
+#endif
 
   // Copy protection
 
@@ -2950,6 +2950,35 @@ HACKY_COM_END()
 
 // IDirectInputDeviceA
 
+// IID_IDirectInputDeviceA -> STDMETHOD(QueryInterface)(THIS_ REFIID riid, LPVOID * ppvObj) PURE; // 0
+HACKY_COM_BEGIN(IDirectInputDeviceA, 0)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("riid 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("ppvObj 0x%" PRIX32 "\n", stack[3]);
+  const API(IID)* iid = (const API(IID)*)Memory(stack[2]);
+
+  char iidString[1024];
+  sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
+          iid->Data1, iid->Data2, iid->Data3,
+          iid->Data4[0], iid->Data4[1], iid->Data4[2], iid->Data4[3],
+          iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
+  printf("  (read iid: {%s})\n", iidString);
+
+  char name[32];  
+
+  if (!strcmp(iidString, "5944E682-C92E-11CF-BFC7-444553540000")) {
+    // Turns this device into a IDirectInputDevice2A
+    API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+    this->version2 = true;
+    *(Address*)Memory(stack[3]) = stack[1];
+  } else {
+    assert(false);
+  }
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
+HACKY_COM_END()
+
 // IDirectInputDeviceA -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirectInputDeviceA, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
@@ -2962,11 +2991,56 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 3)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
-  //FIXME!
+  API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+  API(DIDEVCAPS)* caps = (API(DIDEVCAPS)*)Memory(stack[2]);
+  
+  assert(caps->dwSize == sizeof(API(DIDEVCAPS)));
+
+#define API__DIDC_ATTACHED           0x00000001
+#define API__DIDC_EMULATED           0x00000004
+
+  caps->dwFlags = API(DIDC_ATTACHED) | API(DIDC_EMULATED);
+  caps->dwFFSamplePeriod = 0;
+  caps->dwFFMinTimeResolution = 0;
+  caps->dwFirmwareRevision = 0;
+  caps->dwFFDriverVersion = 0;
+
+  if (this->type == Keyboard) {
+    caps->dwDevType = (API(DIDEVTYPEKEYBOARD_UNKNOWN) << 8) | API(DIDEVTYPE_KEYBOARD);
+    caps->dwAxes = 0;
+    caps->dwButtons = 256; //FIXME
+    caps->dwPOVs = 0;
+    caps->dwHardwareRevision = 0;
+  } else if (this->type == Mouse) {
+    caps->dwDevType = (API(DIDEVTYPEMOUSE_UNKNOWN) << 8) | API(DIDEVTYPE_MOUSE);
+    caps->dwAxes = 2;
+    caps->dwButtons = 2;
+    caps->dwPOVs = 0;
+    caps->dwHardwareRevision = 0;
+  } else if (this->type == Joystick) {
+    caps->dwDevType = (API(DIDEVTYPEJOYSTICK_UNKNOWN) << 8) | API(DIDEVTYPE_JOYSTICK);
+    caps->dwAxes = SDL_JoystickNumAxes(this->joystick);
+    caps->dwButtons = SDL_JoystickNumButtons(this->joystick);
+    caps->dwPOVs = SDL_JoystickNumHats(this->joystick);
+    caps->dwHardwareRevision = SDL_JoystickGetProductVersion(this->joystick);
+  }
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(GetProperty)(THIS_ REFGUID,LPDIPROPHEADER) PURE; // 5
+HACKY_COM_BEGIN(IDirectInputDeviceA, 5)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+
+  //FIXME!
+
+  eax = 0; // FIXME: No idea what this expects to return..
+  esp += 3 * 4;
+HACKY_COM_END()
+
 
 // IDirectInputDeviceA -> STDMETHOD(SetProperty)(THIS_ REFGUID,LPCDIPROPHEADER) PURE; // 6
 HACKY_COM_BEGIN(IDirectInputDeviceA, 6)
@@ -3011,17 +3085,26 @@ void UpdateKeyboardState() {
 
 // IDirectInputDeviceA -> STDMETHOD(GetDeviceState)(THIS_ DWORD,LPVOID) PURE; // 9
 HACKY_COM_BEGIN(IDirectInputDeviceA, 9)
+  API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  UpdateKeyboardState();
-  memcpy(Memory(stack[3]), keyboardState, stack[2]);
+  if (this->type == Keyboard) {
+    UpdateKeyboardState();
+    memcpy(Memory(stack[3]), keyboardState, stack[2]);
+  } else {
+    memset(Memory(stack[3]), 0x00, stack[2]);
+    //assert(false);
+  }
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
 
 // IDirectInputDeviceA -> STDMETHOD(GetDeviceData)(THIS_ DWORD,LPDIDEVICEOBJECTDATA,LPDWORD,DWORD) PURE; // 10
 HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
+  API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
@@ -3031,31 +3114,35 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   // Don't allow PEEK flag
   assert(stack[5] == 0);
 
-  // Diff the keyboard input between calls
-  static uint8_t previousState[256] = {0};
-  assert(sizeof(previousState) == sizeof(keyboardState));
-  UpdateKeyboardState();
-  uint32_t* count = (uint32_t*)Memory(stack[4]);
-  unsigned int max_count = *count;
-  printf("max count is %d\n", max_count);
-  *count = 0;
-  unsigned int objectSize = stack[2];
-  assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
-  for(unsigned int i = 0; i < 256; i++) {
-    if (keyboardState[i] != previousState[i]) {
-      if (*count < max_count) {
-        API(DIDEVICEOBJECTDATA) objectData;
-        memset(&objectData, 0x00, sizeof(objectData));
-        objectData.dwOfs = i;
-        objectData.dwData = keyboardState[i];
-        printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
-        memcpy(Memory(stack[3] + *count * objectSize), &objectData, objectSize);
-        *count = *count + 1;
+  if (this->type == Keyboard) {
+    // Diff the keyboard input between calls
+    static uint8_t previousState[256] = {0};
+    assert(sizeof(previousState) == sizeof(keyboardState));
+    UpdateKeyboardState();
+    uint32_t* count = (uint32_t*)Memory(stack[4]);
+    unsigned int max_count = *count;
+    printf("max count is %d\n", max_count);
+    *count = 0;
+    unsigned int objectSize = stack[2];
+    assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
+    for(unsigned int i = 0; i < 256; i++) {
+      if (keyboardState[i] != previousState[i]) {
+        if (*count < max_count) {
+          API(DIDEVICEOBJECTDATA) objectData;
+          memset(&objectData, 0x00, sizeof(objectData));
+          objectData.dwOfs = i;
+          objectData.dwData = keyboardState[i];
+          printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
+          memcpy(Memory(stack[3] + *count * objectSize), &objectData, objectSize);
+          *count = *count + 1;
+        }
       }
     }
+    memcpy(previousState, keyboardState, sizeof(keyboardState));
+    printf("returning %d entries\n", *count);
+  } else {
+    //FIXME!
   }
-  memcpy(previousState, keyboardState, sizeof(keyboardState));
-  printf("returning %d entries\n", *count);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
@@ -3063,8 +3150,30 @@ HACKY_COM_END()
 
 // IDirectInputDeviceA -> STDMETHOD(SetDataFormat)(THIS_ LPCDIDATAFORMAT) PURE;
 HACKY_COM_BEGIN(IDirectInputDeviceA, 11)
+  API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+
+  API(DIDATAFORMAT)* df = (API(DIDATAFORMAT)*)Memory(stack[2]);
+
+  if (this->type == Keyboard) { printf("Keyboard: "); }
+  else if (this->type == Mouse) { printf("Mouse: "); }
+  else if (this->type == Joystick) { printf("Joystick: "); }
+  else { printf("Unknown: "); }
+
+  printf("%d objects:\n", df->dwNumObjs);
+  for(unsigned int i = 0; i < df->dwNumObjs; i++) {
+    API(DIOBJECTDATAFORMAT)* odf = (API(DIOBJECTDATAFORMAT)*)Memory(df->rgodf + i * sizeof(API(DIOBJECTDATAFORMAT)));
+    if (odf->pguid != 0) {
+      API(GUID)* guid = (API(GUID)*)Memory(odf->pguid);
+      printf("{%08" PRIX32 "-...}", guid->Data1);
+    } else {
+      printf("unknown");
+    }
+    printf(" -> offset: %d, type: 0x%08" PRIX32 "\n", odf->dwOfs, odf->dwType); //FIXME: Print rest of GUID
+  }
+
   eax = 0; // HRESULT -> non-negative means success
   esp += 2 * 4;
 HACKY_COM_END()
@@ -3077,6 +3186,30 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 13)
   eax = 0; // HRESULT -> non-negative means success
   esp += 3 * 4;
 HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(EnumCreatedEffectObjects)(THIS_ LPDIENUMCREATEDEFFECTOBJECTSCALLBACK,LPVOID,DWORD) PURE; // 23
+HACKY_COM_BEGIN(IDirectInputDeviceA, 23)
+  API(DirectInputDeviceA)* this = (API(DirectInputDeviceA)*)Memory(stack[1]);
+  assert(this->version2);
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
+
+  // Don't call any callbacks, as we don't support force-feedback
+
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 4 * 4;
+HACKY_COM_END()
+
+// IDirectInputDeviceA -> STDMETHOD(Poll)(THIS) PURE; // 25
+HACKY_COM_BEGIN(IDirectInputDeviceA, 25)
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  eax = 0; // HRESULT -> non-negative means success
+  esp += 1 * 4;
+HACKY_COM_END()
+
+    
 
 
 
@@ -3167,9 +3300,30 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IDirectInputA, 3)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("rguid 0x%" PRIX32 "\n", stack[2]);
-  hacky_printf("lpIDD 0x%" PRIX32 "\n", stack[3]);
+  hacky_printf("lplpDirectInputDevice 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[4]);
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200);
+
+  Address devAddr = CreateInterface("IDirectInputDeviceA", 200);
+  API(DirectInputDeviceA)* dev = Memory(devAddr);
+  dev->version2 = false;
+
+  const API(GUID)* guid = (const API(GUID)*)Memory(stack[2]);
+
+  //FIXME: look out for GUID_SysMouse and GUID_SysKeyboard
+
+  if (guid->Data2 == 1) {
+    dev->type = Keyboard;
+  } else if (guid->Data2 == 2) {
+    dev->type = Mouse;
+  } else if (guid->Data2 == 3) {
+    dev->type = Joystick;
+    dev->joystick = SDL_JoystickOpen(guid->Data1);
+  } else {
+    printf("Unknown GUID\n");
+    assert(false);
+  }
+
+  *(Address*)Memory(stack[3]) = devAddr;
   eax = 0; // HRESULT -> non-negative means success
   esp += 4 * 4;
 HACKY_COM_END()
@@ -3189,12 +3343,14 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
   //FIXME: Do some callback stuff
   eax = 0; // HRESULT -> non-negative means success
   esp += 5 * 4;
+
   // Push a call to the callback onto the stack.. this is some ugly hack..
 
   // Convention is PASCAL
 
   esp -= 4;
   *(uint32_t*)Memory(esp) = returnAddress;
+  eip = b;
 
   {
     esp -= 4;
@@ -3205,10 +3361,9 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     memset(ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
 
     ddi->dwSize = sizeof(API(DIDEVICEINSTANCEA));
-    //FIXME:    GUID guidInstance;
+    ddi->guidInstance.Data2 = 1; // Data2 = Pseudo Device type in OpenSWE1R
     //FIXME:    GUID guidProduct;
-    #define API__DIDEVTYPE_KEYBOARD          3
-    ddi->dwDevType = API(DIDEVTYPE_KEYBOARD); // or something
+    ddi->dwDevType = (API(DIDEVTYPEKEYBOARD_UNKNOWN) << 8) | API(DIDEVTYPE_KEYBOARD); // or something
     sprintf(ddi->tszInstanceName, "OpenSWE1R Keyboard 1"); // TCHAR tszInstanceName[MAX_PATH];
     sprintf(ddi->tszProductName, "OpenSWE1R Keyboard"); // TCHAR tszProductName[MAX_PATH];
     //FIXME:    GUID guidFFDriver;
@@ -3221,10 +3376,59 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     // Emulate the call
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
-    eip = b;
+  }
+#if 0
+  {
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = c; // pvRef
 
-    printf("  Callback at 0x%" PRIX32 "\n", eip);
-    //FIXME: Add a hook which returns 0
+    Address ddiAddress = Allocate(sizeof(API(DIDEVICEINSTANCEA)));
+    API(DIDEVICEINSTANCEA)* ddi = Memory(ddiAddress);
+    memset(ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
+
+    ddi->dwSize = sizeof(API(DIDEVICEINSTANCEA));
+    ddi->guidInstance.Data2 = 2; // Data2 = Pseudo Device type in OpenSWE1R
+    //FIXME:    GUID guidProduct;
+    ddi->dwDevType = (API(DIDEVTYPEMOUSE_UNKNOWN) << 8) | API(DIDEVTYPE_MOUSE); // or something
+    sprintf(ddi->tszInstanceName, "OpenSWE1R Mouse 1"); // TCHAR tszInstanceName[MAX_PATH];
+    sprintf(ddi->tszProductName, "OpenSWE1R Mouse"); // TCHAR tszProductName[MAX_PATH];
+    //FIXME:    GUID guidFFDriver;
+    ddi->wUsagePage = 0; //FIXME look at usb spec?
+    ddi->wUsage = 0; //FIXME look at usb spec?
+
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = ddiAddress; // LPCDIDEVICEINSTANCEA
+
+    // Emulate the call
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = b; // Return to next call of this function
+  }
+#endif
+  for (unsigned int i = 0; i < SDL_NumJoysticks(); i++) {
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = c; // pvRef
+
+    Address ddiAddress = Allocate(sizeof(API(DIDEVICEINSTANCEA)));
+    API(DIDEVICEINSTANCEA)* ddi = Memory(ddiAddress);
+    memset(ddi, 0x00, sizeof(API(DIDEVICEINSTANCEA)));
+
+    ddi->dwSize = sizeof(API(DIDEVICEINSTANCEA));
+    ddi->guidInstance.Data1 = i; // Data1 = joystick ID in OpenSWE1R (FIXME: Use hash of GUID instead?)
+    ddi->guidInstance.Data2 = 3; // Data2 = Pseudo Device type in OpenSWE1R
+    //FIXME:    GUID guidProduct;
+    ddi->dwDevType = (API(DIDEVTYPEJOYSTICK_UNKNOWN) << 8) | API(DIDEVTYPE_JOYSTICK); // or something
+    sprintf(ddi->tszInstanceName, "Joystick %d (%04X:%04X)", i, SDL_JoystickGetDeviceVendor(i), SDL_JoystickGetDeviceProduct(i)); // TCHAR tszInstanceName[MAX_PATH];
+    sprintf(ddi->tszProductName, SDL_JoystickNameForIndex(i)); // TCHAR tszProductName[MAX_PATH];
+    //FIXME:    GUID guidFFDriver;
+    ddi->wUsagePage = 0; //FIXME look at usb spec?
+    ddi->wUsage = 0; //FIXME look at usb spec?
+
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = ddiAddress; // LPCDIDEVICEINSTANCEA
+
+    // Emulate the call
+    esp -= 4;
+    *(uint32_t*)Memory(esp) = b; // Return to next call of this function
   }
 HACKY_COM_END()
 
@@ -3612,7 +3816,7 @@ void RunX86(Exe* exe) {
 int main(int argc, char* argv[]) {
   printf("-- Initializing\n");
   InitializeEmulation();
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
 		  printf("Failed to initialize SDL2!\n");
   }
   printf("-- Creating window\n");
