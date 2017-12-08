@@ -3068,7 +3068,23 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 8)
   esp += 1 * 4;
 HACKY_COM_END()
 
-uint8_t keyboardState[256];
+uint8_t mouseState[3*4+4*1];
+void UpdateMouseState() {
+  uint32_t buttons = SDL_GetMouseState(NULL, NULL);
+#if 1
+  mouseState[3*4+0*1] = (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) ? 0x80 : 0x00;
+  mouseState[3*4+1*1] = (buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) ? 0x80 : 0x00;
+  mouseState[3*4+2*1] = (buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) ? 0x80 : 0x00;
+  mouseState[3*4+3*1] = 0x00;
+#else
+  for(unsigned int i = 0; i < 2; i++) {
+    mouseState[i] = (buttons & 1) << 7;
+    buttons >>= 1;
+  }
+#endif
+}
+
+uint8_t keyboardState[256*1];
 void UpdateKeyboardState() {
   const Uint8 *sdlState = SDL_GetKeyboardState(NULL);
   const uint8_t pressed = 0x80; // This is the only requirement for pressed keys
@@ -3093,9 +3109,11 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 9)
   if (this->type == Keyboard) {
     UpdateKeyboardState();
     memcpy(Memory(stack[3]), keyboardState, stack[2]);
+  } else if (this->type == Mouse) {
+    UpdateMouseState();
+    memcpy(Memory(stack[3]), mouseState, stack[2]);
   } else {
     memset(Memory(stack[3]), 0x00, stack[2]);
-    //assert(false);
   }
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -3140,7 +3158,34 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
     }
     memcpy(previousState, keyboardState, sizeof(keyboardState));
     printf("returning %d entries\n", *count);
-  } else {
+  } else if (this->type == Mouse) {
+    // Diff the keyboard input between calls
+    static uint8_t previousState[3*4+4*1] = {0};
+    assert(sizeof(previousState) == sizeof(mouseState));
+    UpdateMouseState();
+    uint32_t* count = (uint32_t*)Memory(stack[4]);
+    unsigned int max_count = *count;
+    printf("max count is %d\n", max_count);
+    *count = 0;
+    unsigned int objectSize = stack[2];
+    assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
+    for(unsigned int i = 0; i < 3*4+4*1; i++) {
+      if (mouseState[i] != previousState[i]) {
+        if (*count < max_count) {
+          API(DIDEVICEOBJECTDATA) objectData;
+          memset(&objectData, 0x00, sizeof(objectData));
+          objectData.dwOfs = i;
+          objectData.dwData = mouseState[i];
+          printf("Adding %d: %d\n", objectData.dwOfs, objectData.dwData);
+          memcpy(Memory(stack[3] + *count * objectSize), &objectData, objectSize);
+          *count = *count + 1;
+        }
+      }
+    }
+    memcpy(previousState, mouseState, sizeof(mouseState));
+    printf("returning %d entries\n", *count);
+
+
     //FIXME!
   }
 
@@ -3377,7 +3422,7 @@ HACKY_COM_BEGIN(IDirectInputA, 4)
     esp -= 4;
     *(uint32_t*)Memory(esp) = clearEax; // Return to clear eax
   }
-#if 0
+#if 1
   {
     esp -= 4;
     *(uint32_t*)Memory(esp) = c; // pvRef
