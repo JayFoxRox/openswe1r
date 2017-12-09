@@ -28,12 +28,6 @@ static SDL_Window* sdlWindow;
 
 uint32_t callId = 0;
 
-typedef struct {
-  const char* name;
-  void(*callback)(void*, Address, void*);
-  Address address;
-} Export;
-
 unsigned int exportCount = 0;
 Export* exports = NULL;
 
@@ -131,7 +125,7 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
 Exe* exe; //FIXME: This is hack. I feel this shouldn't be exposed aside from the loader
 const char* exeName = "swep1rcr.exe";
 
-static char* TranslatePath(const char* path) {
+char* TranslatePath(const char* path) {
   char* newPath = malloc(strlen(path) + 1);
   char* cursor = strcpy(newPath, path);
   while(*cursor != '\0') {

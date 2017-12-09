@@ -17,8 +17,18 @@ static inline int hacky_printf(const char* fmt, ...) {
 #endif
 }
 
+typedef struct {
+  const char* name;
+  void(*callback)(void*, Address, void*);
+  Address address;
+} Export;
+
 Address CreateInterface(const char* name, unsigned int slotCount);
 void AddExport(const char* name, void* callback, Address address);
+Export* LookupExportByName(const char* name);
+Export* LookupExportByOrdinal(const char* name, uint32_t ordinal);
+
+char* TranslatePath(const char* path);
 
 #define HACKY_IMPORT_BEGIN(_name) \
   static void Hook_ ## _name (void* uc, Address address, void* user_data); \
