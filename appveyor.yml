@@ -27,6 +27,8 @@ install:
   - git submodule update --init --recursive
   - ps: |
         Get-WindowsFeature
+        Install-WindowsFeature –Name Hyper-V -IncludeManagementTools -Restart  
+        Get-WindowsFeature
         if ($env:BUILD_TYPE -eq 'mingw') {
           # redirect err to null to prevent warnings from becoming errors
           C:\msys64\usr\bin\bash -lc "pacman --noconfirm -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-glew mingw-w64-x86_64-devil mingw-w64-x86_64-openal 2>&1"
