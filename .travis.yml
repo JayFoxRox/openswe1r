@@ -14,3 +14,9 @@ matrix:
       services: docker
       install: "./.travis/ubuntu/install.sh"
       script: "./.travis/ubuntu/script.sh"
+    - os: linux
+      env: NAME="FreeBSD build"
+      sudo: required
+      dist: trusty
+      install: "./.travis/freebsd/install.sh"
+      script: "./.travis/freebsd/script.sh"
