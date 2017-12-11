@@ -229,6 +229,9 @@ typedef struct {
   API(DDSURFACEDESC2) desc;
 } API(DirectDrawSurface4);
 
+enum {
+  API(DDSCAPS_ZBUFFER) =				0x00020000l
+};
 
 
 #endif

@@ -2070,10 +2070,6 @@ enum {
     glClear(GL_COLOR_BUFFER_BIT);
   }
 
-glDepthMask(GL_TRUE);
-glClearDepthf(1.0f);
-glClear(GL_DEPTH_BUFFER_BIT);
-
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 6 * 4;
 HACKY_COM_END()
@@ -2178,6 +2174,22 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
     memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
   }
 
+
+  if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
+    assert(this->desc.lPitch == 2*this->desc.dwWidth);
+
+//    memset(Memory(this->desc.lpSurface), 0xFF, this->desc.dwHeight * this->desc.lPitch);
+
+    for(unsigned int i = 0; i < this->desc.dwHeight; i++) {
+      glReadPixels(0, this->desc.dwHeight - i - 1, this->desc.dwWidth, 1, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, Memory(this->desc.lpSurface + i * this->desc.lPitch));
+      printf("L [%d] 0x%04X\n", i, *(uint16_t*)Memory(this->desc.lpSurface+2*i));
+    }
+
+    printf("0x%08X\n", returnAddress);
+    //assert(false);
+  }
+
+
   API(DDSURFACEDESC2)* desc = Memory(stack[3]);
   memcpy(desc, &this->desc, sizeof(API(DDSURFACEDESC2)));
   
@@ -2233,6 +2245,27 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   }
   glBindTexture(GL_TEXTURE_2D, previousTexture);
 
+
+  if (desc->ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
+    static int t = 1;
+    if (t-- <= 0) {
+
+      for(unsigned int i = 0; i < desc->dwWidth; i++) {
+        printf("U [%d] 0x%04X\n", i, *(uint16_t*)Memory(desc->lpSurface+2*i));
+      }
+
+      printf("0x%08X\n", returnAddress);
+      //assert(false);
+
+if ((rand() & 0xFF) > 0x7F) {
+glDepthMask(GL_TRUE);
+glClearDepthf(1.0f);
+glClear(GL_DEPTH_BUFFER_BIT);
+}
+
+    }
+  }
+
 //Hack: part 2: don't free this to keep data in RAM. see lock for part 1
 #if 0
   Free(desc->lpSurface);
@@ -2256,7 +2289,7 @@ HACKY_COM_END()
 
 
 
-
+Address d3d_desc_addr = 0;
 
 
 
@@ -2290,6 +2323,7 @@ HACKY_COM_BEGIN(IDirect3D3, 3)
     *(uint32_t*)Memory(esp) = b; // lpContext
 
     Address desc_addr = Allocate(sizeof(API(D3DDEVICEDESC)));
+    d3d_desc_addr = desc_addr;
     API(D3DDEVICEDESC)* desc = (API(D3DDEVICEDESC)*)Memory(desc_addr);
     memset(desc, 0x00, sizeof(API(D3DDEVICEDESC)));
     desc->dwSize = sizeof(API(D3DDEVICEDESC));
@@ -2307,6 +2341,9 @@ enum {
     desc->dpcTriCaps.dwTextureCaps |= API(D3DPTEXTURECAPS_PERSPECTIVE);
     desc->dpcTriCaps.dwTextureCaps |= API(D3DPTEXTURECAPS_ALPHA);
     desc->dpcTriCaps.dwTextureCaps |= API(D3DPTEXTURECAPS_TRANSPARENCY);
+
+    desc->dpcTriCaps.dwTextureBlendCaps = 0;
+    desc->dpcTriCaps.dwTextureBlendCaps |= API(D3DPTBLENDCAPS_MODULATEALPHA);
 
 enum {
   API(D3DPSHADECAPS_ALPHAGOURAUDBLEND) = 0x00004000L
@@ -2491,6 +2528,9 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 3)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+  assert(d3d_desc_addr != 0);
+  memcpy(Memory(stack[2]), Memory(d3d_desc_addr), sizeof(API(D3DDEVICEDESC)));
+  memcpy(Memory(stack[3]), Memory(d3d_desc_addr), sizeof(API(D3DDEVICEDESC)));
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -3757,6 +3797,17 @@ int main(int argc, char* argv[]) {
 #endif
 
 //memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
+
+
+
+
+printf("dpcTriCaps: %d\n", offsetof(API(D3DDEVICEDESC),dpcTriCaps));
+printf("dpcTriCaps.dwTextureFilterCaps: %d\n", offsetof(API(D3DDEVICEDESC),dpcTriCaps.dwTextureFilterCaps));
+
+
+printf("dwDeviceRenderBitDepth: %d\n", offsetof(API(D3DDEVICEDESC),dwDeviceRenderBitDepth));
+
+printf("dwFVFCaps: %d\n", offsetof(API(D3DDEVICEDESC),dwFVFCaps));
 
   printf("-- Switching mode\n");
   RunX86(exe);
