@@ -1,6 +1,7 @@
 [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/OpenSWE1R)       [![Travis build Status](https://travis-ci.org/OpenSWE1R/openswe1r.svg?branch=master)](https://travis-ci.org/OpenSWE1R/openswe1r)       [![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/92s5hpto3kvn8sx3/branch/master?svg=true)](https://ci.appveyor.com/project/JayFoxRox82949/openswe1r/branch/master)
 
 [![Gitter Chat](https://img.shields.io/badge/Gitter-Chat-blue.svg?style=for-the-badge)]()
+[![Bugs](https://img.shields.io/github/issues-raw/OpenSWE1R/openswe1r/bug.svg?style=for-the-badge&label=Known%20Bugs)]()
 [![AppVeyor CI](https://img.shields.io/appveyor/ci/JayFoxRox82949/openswe1r/master.svg?style=for-the-badge&label=AppVeyor%20CI)]()
 [![Travis CI](https://img.shields.io/travis/OpenSWE1R/openswe1r/master.svg?style=for-the-badge&label=Travis%20CI)]()
 
