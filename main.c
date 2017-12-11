@@ -1918,8 +1918,17 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
 
   printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
 
-  halCaps->dwCaps = 0x00000001;
-  halCaps->dwCaps2 = 0x00080000;
+enum {
+  API(DDCAPS_3D) =              0x00000001l,
+  API(DDCAPS_BLTDEPTHFILL) =    0x10000000l
+};
+
+enum {
+  API(DDCAPS2_CANRENDERWINDOWED) = 0x00080000l
+};
+
+  halCaps->dwCaps = API(DDCAPS_3D) | API(DDCAPS_BLTDEPTHFILL);
+  halCaps->dwCaps2 = API(DDCAPS2_CANRENDERWINDOWED);
   halCaps->dwVidMemTotal = 16*1024*1024; // 16MiB VRAM free :)
   halCaps->dwVidMemFree = 12*1024*1024; // 12MiB VRAM free :(
   
@@ -2053,9 +2062,12 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
 API(DDBLTFX)* bltfx = Memory(e);
 
 enum {
+  API(DDBLT_COLORFILL) = 0x00000400l,
   API(DDBLT_WAIT)      = 0x01000000l,
-  API(DDBLT_COLORFILL) = 0x00000400l
+  API(DDBLT_DEPTHFILL) = 0x02000000l
 };
+
+  assert((d & ~(API(DDBLT_COLORFILL) | API(DDBLT_WAIT) | API(DDBLT_DEPTHFILL))) == 0);
 
   if (d & API(DDBLT_WAIT)) {
     // nop
@@ -2068,6 +2080,14 @@ enum {
                  ((bltfx->dwFillColor >> 8) & 0xFF) / 255.0f,
                  (bltfx->dwFillColor & 0xFF) / 255.0f); //FIXME: Alpha clear is a different flag I believe?!
     glClear(GL_COLOR_BUFFER_BIT);
+  }
+
+  if (d & API(DDBLT_DEPTHFILL)) {
+    printf("dwFillDepth: 0x%08X\n", bltfx->dwFillDepth);
+    glDepthMask(GL_TRUE);
+    assert(bltfx->dwFillDepth = 0xFFFF);
+    glClearDepthf(1.0f); //FIXME!!
+    glClear(GL_DEPTH_BUFFER_BIT);
   }
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -2257,12 +2277,6 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
       printf("0x%08X\n", returnAddress);
       //assert(false);
 
-if ((rand() & 0xFF) > 0x7F) {
-glDepthMask(GL_TRUE);
-glClearDepthf(1.0f);
-glClear(GL_DEPTH_BUFFER_BIT);
-}
-
     }
   }
 
@@ -2351,6 +2365,13 @@ enum {
 
     desc->dpcTriCaps.dwShadeCaps = 0;
     desc->dpcTriCaps.dwShadeCaps |= API(D3DPSHADECAPS_ALPHAGOURAUDBLEND);
+
+enum {
+  API(D3DPRASTERCAPS_FOGTABLE) =                 0x00000100L
+};
+
+    desc->dpcTriCaps.dwRasterCaps = 0;
+    desc->dpcTriCaps.dwRasterCaps |= API(D3DPRASTERCAPS_FOGTABLE);
 
 enum {
   API(D3DPTBLENDCAPS_MODULATEALPHA) = 0x00000008L
@@ -2774,6 +2795,7 @@ HACKY_COM_END()
 
 // IDirect3DDevice3 -> STDMETHOD(SetTransform)(THIS_ D3DTRANSFORMSTATETYPE,LPD3DMATRIX) PURE; // 25
 HACKY_COM_BEGIN(IDirect3DDevice3, 25)
+  hacky_printf("SetTransform\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
