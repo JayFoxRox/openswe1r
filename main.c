@@ -2712,6 +2712,10 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 22)
   uint32_t a = stack[2];
   uint32_t b = stack[3];
   switch(a) {
+    case API(D3DRENDERSTATE_TEXTUREPERSPECTIVE):
+      assert(b == 1);
+      break;
+
     case API(D3DRENDERSTATE_ZENABLE):
       assert(b < 2);
       glSet(GL_DEPTH_TEST, b);
