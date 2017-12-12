@@ -2062,6 +2062,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
 
   //SDL_GL_SwapWindow(sdlWindow);
 
+  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+
 API(DDBLTFX)* bltfx = Memory(e);
 
 enum {
@@ -2077,15 +2079,29 @@ enum {
   }
 
   if (d & API(DDBLT_COLORFILL)) {
+    assert(!(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)));
+    printf("Surface is %d RGB bits\n", this->desc.ddpfPixelFormat.dwRGBBitCount);
+    //FIXME: Why is this zero during startup?!
+    if (this->desc.ddpfPixelFormat.dwRGBBitCount != 0) {
+      assert(this->desc.ddpfPixelFormat.dwRGBBitCount == 16);
+    }
+
+//((unsigned int)a3 >> 3) | 8 * (a2 & 0xFC | 32 * (a1 & 0xF8)), a4);
+
     printf("dwFillColor: 0x%08X\n", bltfx->dwFillColor);
-    glClearColor(((bltfx->dwFillColor >> 24) & 0xFF) / 255.0f,
-                 ((bltfx->dwFillColor >> 16) & 0xFF) / 255.0f,
-                 ((bltfx->dwFillColor >> 8) & 0xFF) / 255.0f,
-                 (bltfx->dwFillColor & 0xFF) / 255.0f); //FIXME: Alpha clear is a different flag I believe?!
+    glClearColor(((bltfx->dwFillColor >> 11) & 0x1F) / 31.0f,
+                 ((bltfx->dwFillColor >> 5) & 0x3F) / 63.0f,
+                 (bltfx->dwFillColor & 0x1F) / 31.0f,
+                 255.0f); //FIXME: Alpha clear is a different flag I believe?!
     glClear(GL_COLOR_BUFFER_BIT);
   }
 
   if (d & API(DDBLT_DEPTHFILL)) {
+    assert(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER));
+    printf("Surface is %d Z bits\n", this->desc.ddpfPixelFormat.dwZBufferBitDepth);
+    assert(this->desc.ddpfPixelFormat.dwZBufferBitDepth == 16);
+      
+
     printf("dwFillDepth: 0x%08X\n", bltfx->dwFillDepth);
     glDepthMask(GL_TRUE);
     assert(bltfx->dwFillDepth = 0xFFFF);
@@ -2139,6 +2155,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
     printf("Creating new dummy surface\n");
     Address surfaceAddress = CreateInterface("IDirectDrawSurface4", 50);
     API(DirectDrawSurface4)* surface = (API(DirectDrawSurface4)*)Memory(surfaceAddress);
+    memset(&surface->desc, 0x00, sizeof(surface->desc));
+    surface->desc.ddpfPixelFormat.dwRGBBitCount = 16; // FIXME: Why doesn't the game support 32 bit?!
     surface->texture = 0;
     *(Address*)Memory(stack[3]) = surfaceAddress;
   }

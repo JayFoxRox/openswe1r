@@ -130,8 +130,9 @@ typedef struct {
 } API(DDCAPS);
 
 enum {
-  API(DDSCAPS_TEXTURE) = 0x00001000,
-  API(DDSCAPS_MIPMAP)  = 0x00400000
+  API(DDSCAPS_TEXTURE) =        0x00001000,
+  API(DDSCAPS_ZBUFFER) =				0x00020000,
+  API(DDSCAPS_MIPMAP)  =        0x00400000
 };
 
 typedef struct {
@@ -228,10 +229,6 @@ typedef struct {
   Address texture; // Direct3DTexture2*
   API(DDSURFACEDESC2) desc;
 } API(DirectDrawSurface4);
-
-enum {
-  API(DDSCAPS_ZBUFFER) =				0x00020000l
-};
 
 
 #endif
