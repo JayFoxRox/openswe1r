@@ -130,8 +130,9 @@ typedef struct {
 } API(DDCAPS);
 
 enum {
-  API(DDSCAPS_TEXTURE) = 0x00001000,
-  API(DDSCAPS_MIPMAP)  = 0x00400000
+  API(DDSCAPS_TEXTURE) =        0x00001000,
+  API(DDSCAPS_ZBUFFER) =				0x00020000,
+  API(DDSCAPS_MIPMAP)  =        0x00400000
 };
 
 typedef struct {
@@ -181,9 +182,53 @@ enum {
 };
 
 typedef struct {
+  uint32_t dwSize;				// size of structure
+  uint32_t dwDDFX;				// FX operations
+  uint32_t dwROP;				// Win32 raster operations
+  uint32_t dwDDROP;			// Raster operations new for DirectDraw
+  uint32_t dwRotationAngle;		// Rotation angle for blt
+  uint32_t dwZBufferOpCode;		// ZBuffer compares
+  uint32_t dwZBufferLow;			// Low limit of Z buffer
+  uint32_t dwZBufferHigh;			// High limit of Z buffer
+  uint32_t dwZBufferBaseDest;		// Destination base value
+  uint32_t dwZDestConstBitDepth;		// Bit depth used to specify Z constant for destination
+  union {
+    uint32_t dwZDestConst;			// Constant to use as Z buffer for dest
+    Address lpDDSZBufferDest;	// Surface to use as Z buffer for dest
+  };
+  uint32_t dwZSrcConstBitDepth;		// Bit depth used to specify Z constant for source
+  union {
+    uint32_t dwZSrcConst;			// Constant to use as Z buffer for src
+    Address lpDDSZBufferSrc;	// Surface to use as Z buffer for src
+  };
+  uint32_t dwAlphaEdgeBlendBitDepth;	// Bit depth used to specify constant for alpha edge blend
+  uint32_t dwAlphaEdgeBlend;		// Alpha for edge blending
+  uint32_t dwReserved;
+  uint32_t dwAlphaDestConstBitDepth;	// Bit depth used to specify alpha constant for destination
+  union {
+    uint32_t dwAlphaDestConst;		// Constant to use as Alpha Channel
+    Address lpDDSAlphaDest;	// Surface to use as Alpha Channel
+  };
+  uint32_t dwAlphaSrcConstBitDepth;	// Bit depth used to specify alpha constant for source
+  union {
+    uint32_t dwAlphaSrcConst;		// Constant to use as Alpha Channel
+    Address lpDDSAlphaSrc;	// Surface to use as Alpha Channel
+  };
+  union {
+    uint32_t dwFillColor;			// color in RGB or Palettized
+    uint32_t   dwFillDepth;                    // depth value for z-buffer
+    uint32_t dwFillPixel;			// pixel value for RGBA or RGBZ
+    Address lpDDSPattern;	// Surface to use as pattern
+  };
+  API(DDCOLORKEY)	ddckDestColorkey;		// DestColorkey override
+  API(DDCOLORKEY)	ddckSrcColorkey;		// SrcColorkey override
+} API(DDBLTFX);
+
+typedef struct {
   void* vtable;
   Address texture; // Direct3DTexture2*
   API(DDSURFACEDESC2) desc;
 } API(DirectDrawSurface4);
+
 
 #endif
