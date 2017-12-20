@@ -32,6 +32,8 @@ add_executable(openswe1r
 
   com/a3d.c
   com/dplay.c
+
+  game/main.cpp
 )
 
 if(USE_VM)
