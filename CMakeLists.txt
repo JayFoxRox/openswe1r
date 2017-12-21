@@ -29,6 +29,7 @@ add_executable(openswe1r
   shader.c
 
   dll/kernel32.c
+  dll/smush.c
 
   com/a3d.c
   com/dplay.c

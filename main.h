@@ -17,8 +17,18 @@ static inline int hacky_printf(const char* fmt, ...) {
 #endif
 }
 
+typedef struct {
+  const char* name;
+  void(*callback)(void*, Address, void*);
+  Address address;
+} Export;
+
 Address CreateInterface(const char* name, unsigned int slotCount);
 void AddExport(const char* name, void* callback, Address address);
+Export* LookupExportByName(const char* name);
+Export* LookupExportByOrdinal(const char* name, uint32_t ordinal);
+
+char* TranslatePath(const char* path);
 
 // Defines an INITIALIZER macro which will run code at startup
 #if defined(__GNUC__)
