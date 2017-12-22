@@ -13,6 +13,16 @@
 #include "al.h"
 #include "alc.h"
 
+static void AL_APIENTRY alc_DeferUpdatesSOFT(void) {
+  alcSuspendContext(alcGetCurrentContext());
+}
+
+static void AL_APIENTRY alc_ProcessUpdatesSOFT(void) {
+  alcProcessContext(alcGetCurrentContext());
+}
+
+static void(AL_APIENTRY *_DeferUpdatesSOFT)(void) = NULL;
+static void(AL_APIENTRY *_ProcessUpdatesSOFT)(void) = NULL;
 
 typedef struct {
   void* vtable;
@@ -245,6 +255,10 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3d4, 13)
   hacky_printf("Flush\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  _ProcessUpdatesSOFT();
+  _DeferUpdatesSOFT();
+
   eax = 0;
   esp += 1 * 4;
 HACKY_COM_END()
@@ -268,6 +282,18 @@ HACKY_COM_BEGIN(IA3d4, 15)
   if (!alcMakeContextCurrent(this->context)) {
     assert(false);
   }
+
+  if (alcIsExtensionPresent(this->device, "AL_SOFT_deferred_updates") == ALC_TRUE) {
+    _DeferUpdatesSOFT = alcGetProcAddress(this->device, "DeferUpdatesSOFT");
+    _ProcessUpdatesSOFT = alcGetProcAddress(this->device, "ProcessUpdatesSOFT");
+  } else {
+    _DeferUpdatesSOFT = alc_DeferUpdatesSOFT;
+    _ProcessUpdatesSOFT = alc_ProcessUpdatesSOFT;
+    printf("AL_SOFT_deferred_updates not present, using fallback\n");
+  }
+
+  // Stop updating, so we must force IA3d4::Flush
+  _DeferUpdatesSOFT();
 
   eax = 0;
   esp += 4 * 4;
