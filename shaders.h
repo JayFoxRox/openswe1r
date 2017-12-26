@@ -52,7 +52,9 @@ static const char* FragmentShader1Texture =
 #endif
 "\n"
 "void main() {\n"
-"  color = texture(tex0, uv0);\n"
+"  vec2 ts = vec2(textureSize(tex0, 0));\n"
+"  vec2 better_uv = (uv0 * (ts - 1.0) + 0.5) / ts;\n"
+"  color = texture(tex0, better_uv);\n"
 "  color *= diffuse;\n"
 "  if (alphaTest && !(int(round(color.a * 255.0)) != 0)) { discard; }\n"
 "}\n";
