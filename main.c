@@ -3116,7 +3116,8 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 5)
   API(Direct3DTexture2)* this = Memory(stack[1]);
   API(Direct3DTexture2)* a = Memory(stack[2]);
   //FIXME: Dirty hack..
-  this->handle = a->handle;
+  memcpy(this, a, sizeof(API(Direct3DTexture2)));
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
