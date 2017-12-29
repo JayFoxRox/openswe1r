@@ -10,7 +10,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(ENet)
 find_package(Unicorn REQUIRED)
-find_package(OpenGL REQUIRED)
+find_package(OpenGLES2 REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(OpenAL REQUIRED)
 
@@ -22,7 +22,7 @@ endif()
 
 include_directories(SYSTEM
   ${LIBUNICORN_INCLUDE_DIR}
-  ${OPENGL_INCLUDE_DIR}
+  ${OPENGLES2_INCLUDE_DIR}
   ${SDL2_INCLUDE_DIR}
   ${OPENAL_INCLUDE_DIR}
 )
@@ -58,7 +58,7 @@ if(ENET_FOUND)
 endif()
 
 target_link_libraries(openswe1r
-  ${OPENGL_LIBRARIES}
+  ${OPENGLES2_LIBRARIES}
   ${SDL2_LIBRARY}
   ${OPENAL_LIBRARY}
 )
