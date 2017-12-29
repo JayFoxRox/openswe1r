@@ -40,6 +40,7 @@ static const char* FragmentShader1Texture =
 "\n"
 "uniform sampler2D tex0;\n"
 "uniform bool alphaTest;\n"
+"uniform bool textureSwizzle;\n"
 "\n"
 "varying lowp vec4 diffuse;\n"
 "varying lowp vec4 specular;\n"
@@ -53,6 +54,9 @@ static const char* FragmentShader1Texture =
 "\n"
 "void main() {\n"
 "  color = texture2D(tex0, uv0);\n"
+"  if (textureSwizzle) {\n"
+"    color = color.gbar;\n"
+"  }\n"
 "  color *= diffuse;\n"
 "  if (alphaTest && !(int(round(color.a * 255.0)) != 0)) { discard; }\n"
 "}\n";

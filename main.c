@@ -376,6 +376,7 @@ bool depthMask;
 GLenum destBlend;
 GLenum srcBlend;
 bool alphaTest;
+bool textureSwizzle;
 uint32_t fogColor; // ARGB
 bool fogEnable;
 float fogStart;
@@ -420,6 +421,7 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
   glUniformMatrix4fv(glGetUniformLocation(program, "projectionMatrix"), 1, GL_FALSE, projectionMatrix);
 
   glUniform1i(glGetUniformLocation(program, "alphaTest"), alphaTest);
+  glUniform1i(glGetUniformLocation(program, "textureSwizzle"), textureSwizzle);
 
   glUniform1i(glGetUniformLocation(program, "fogEnable"), fogEnable);
   glUniform1f(glGetUniformLocation(program, "fogStart"), fogStart);
@@ -2371,6 +2373,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   if (desc->ddpfPixelFormat.dwRGBBitCount == 32) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    texture->swizzle = false;
   } else {
     if (desc->ddpfPixelFormat.dwRGBAlphaBitMask == 0x8000) {
       //FIXME: Do this properly [buffer size + how copy size is calculated etc]
@@ -2381,8 +2384,10 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
         swap_buffer[i] = (swap_buffer[i] << 1) | (swap_buffer[i] >> 15);
       }
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, swap_buffer);
+      texture->swizzle = false;
     } else {
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, Memory(desc->lpSurface));
+      texture->swizzle = true;
     }
   }
   glBindTexture(GL_TEXTURE_2D, previousTexture);
@@ -3031,6 +3036,8 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 38)
     API(Direct3DTexture2)* texture = Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
+    textureSwizzle = texture->swizzle;
+printf("Setting texture swizzle to %d for %d\n", textureSwizzle, texture->handle);
   } else {
     glBindTexture(GL_TEXTURE_2D, 0); // FIXME: I believe this is supposed to be white?!
   }
