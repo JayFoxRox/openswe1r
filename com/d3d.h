@@ -14,6 +14,7 @@ typedef struct {
   void* vtable;
   Address surface;
   GLuint handle;
+  bool swizzle;
 } API(Direct3DTexture2);
 
 typedef struct {
