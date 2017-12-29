@@ -3942,14 +3942,6 @@ int main(int argc, char* argv[]) {
 	  assert(glcontext != NULL);
 
 
-    //FIXME: This is ugly but gets the job done.. for now
-    static GLuint vao = 0;
-    if (vao == 0) {
-      glGenVertexArrays(1, &vao);
-    }
-    glBindVertexArray(vao);
-
-
     glDisable(GL_CULL_FACE);
 //    glDepthFunc(GL_GEQUAL);
     glCullFace(GL_FRONT);    
