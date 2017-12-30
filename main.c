@@ -24,7 +24,7 @@
 #include "SDL.h"
 static SDL_Window* sdlWindow;
 
-#include <GL/glew.h>
+#include <GLES2/gl2.h>
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -327,7 +327,7 @@ static void UcCrashHook(void* uc, uint64_t address, uint32_t size, void* user_da
   sprintf(buf, "Bug: ecx=0x%08" PRIX32 ", at eip=0x%08" PRIX32 ". 0x%08" PRIX32 " 0x%08" PRIX32 " 0x%08" PRIX32 " 0x%08" PRIX32,
           ecx, eip,
           stack[0], stack[1], stack[2], stack[3]);
-  glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION, -1, buf);
+//  glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION, -1, buf);
 }
 
 static void PrintVertices(unsigned int vertexFormat, Address address, unsigned int count) {
@@ -376,6 +376,7 @@ bool depthMask;
 GLenum destBlend;
 GLenum srcBlend;
 bool alphaTest;
+bool textureSwizzle;
 uint32_t fogColor; // ARGB
 bool fogEnable;
 float fogStart;
@@ -420,6 +421,7 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
   glUniformMatrix4fv(glGetUniformLocation(program, "projectionMatrix"), 1, GL_FALSE, projectionMatrix);
 
   glUniform1i(glGetUniformLocation(program, "alphaTest"), alphaTest);
+  glUniform1i(glGetUniformLocation(program, "textureSwizzle"), textureSwizzle);
 
   glUniform1i(glGetUniformLocation(program, "fogEnable"), fogEnable);
   glUniform1f(glGetUniformLocation(program, "fogStart"), fogStart);
@@ -432,7 +434,7 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
   glUniform3fv(glGetUniformLocation(program, "clipScale"), 1, clipScale);
   glUniform3fv(glGetUniformLocation(program, "clipOffset"), 1, clipOffset);
 
-#if 1
+#if 0 //FIXME!!
   // Hack to disable texture if tex0 is used - doesn't work?!
   if (texCount == 0) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ONE);
@@ -1200,7 +1202,7 @@ HACKY_IMPORT_BEGIN(StretchBlt)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, stack[4], stack[5], 0, GL_BGR, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, stack[4], stack[5], 0, GL_RGB, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, previousTexture);
   } else {
 
@@ -2370,12 +2372,22 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   if (desc->ddpfPixelFormat.dwRGBBitCount == 32) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    texture->swizzle = false;
   } else {
     if (desc->ddpfPixelFormat.dwRGBAlphaBitMask == 0x8000) {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, Memory(desc->lpSurface));
+      //FIXME: Do this properly [buffer size + how copy size is calculated etc]
+      uint16_t swap_buffer[1024*1024];
+      unsigned int c = desc->dwWidth * desc->dwHeight;
+      memcpy(swap_buffer, Memory(desc->lpSurface), 2 * c);
+      for(unsigned int i = 0; i < c; i++) {
+        swap_buffer[i] = (swap_buffer[i] << 1) | (swap_buffer[i] >> 15);
+      }
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, swap_buffer);
+      texture->swizzle = false;
     } else {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, Memory(desc->lpSurface));
+      texture->swizzle = true;
     }
   }
   glBindTexture(GL_TEXTURE_2D, previousTexture);
@@ -3024,6 +3036,8 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 38)
     API(Direct3DTexture2)* texture = Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
+    textureSwizzle = texture->swizzle;
+printf("Setting texture swizzle to %d for %d\n", textureSwizzle, texture->handle);
   } else {
     glBindTexture(GL_TEXTURE_2D, 0); // FIXME: I believe this is supposed to be white?!
   }
@@ -3109,7 +3123,8 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 5)
   API(Direct3DTexture2)* this = Memory(stack[1]);
   API(Direct3DTexture2)* a = Memory(stack[2]);
   //FIXME: Dirty hack..
-  this->handle = a->handle;
+  memcpy(this, a, sizeof(API(Direct3DTexture2)));
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
@@ -3181,7 +3196,7 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
     float b = (clearColor & 0xFF) / 255.0f;
 
     glClearStencil(stencilValue);
-    glClearDepth(zValue);
+    glClearDepthf(zValue);
     glClearColor(r, g, b, a);
     glClear(((flags & API(D3DCLEAR_TARGET)) ? GL_COLOR_BUFFER_BIT : 0) |
             ((flags & API(D3DCLEAR_ZBUFFER)) ? GL_DEPTH_BUFFER_BIT : 0) |
@@ -3913,9 +3928,9 @@ int main(int argc, char* argv[]) {
 		  style |= SDL_WINDOW_FULLSCREEN;
     }
 
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -3925,13 +3940,6 @@ int main(int argc, char* argv[]) {
 
 	  SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
 	  assert(glcontext != NULL);
-
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-      fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
-      return 1;
-    }
 
 
     //FIXME: This is ugly but gets the job done.. for now
