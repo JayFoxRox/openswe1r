@@ -25,6 +25,8 @@
 static SDL_Window* sdlWindow;
 
 #include <GLES2/gl2.h>
+static GLuint depthRBOs[2];
+static GLuint depthFBO;
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -1211,6 +1213,8 @@ HACKY_IMPORT_BEGIN(StretchBlt)
     glClearColor(1.0f,0.0f,1.0f,1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    assert(false);
+
     printf("Invalid destination!\n");
   }
 
@@ -2165,6 +2169,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     // nop
   }
 
+  GLbitfield clearMask = 0;
+
   if (d & API(DDBLT_COLORFILL)) {
     assert(!(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)));
 
@@ -2187,6 +2193,10 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     glDepthMask(GL_TRUE);
     assert(bltfx->dwFillDepth = 0xFFFF);
     glClearDepthf(1.0f); //FIXME!!
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_DEPTH_BUFFER_BIT);
   }
 
@@ -2303,8 +2313,23 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
     assert(this->desc.lPitch == 2 * this->desc.dwWidth);
 
-    uint8_t* pixel_buffer = Memory(this->desc.lpSurface);
-    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    uint8_t* pixel_buffer_ref = Memory(this->desc.lpSurface); 
+    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer_ref);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    uint8_t* pixel_buffer = malloc(this->desc.dwWidth*this->desc.dwHeight*4);
+    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixel_buffer);
+
+    uint32_t* b = pixel_buffer;
+    uint16_t* r = pixel_buffer_ref;
+    for(int y = 0; y < 480; y += 10) {
+      for(int x = 0; x < 640; x += 10) {
+        printf("%d, %d: 0x%08X == 0x%04X [ref]\n", x, y, b[y * this->desc.dwWidth + x], r[y * this->desc.dwWidth + x]);
+      }
+    }
+
+    free(pixel_buffer);
+    pixel_buffer = pixel_buffer_ref;
 
     // Reserve a buffer for swapping lines during image flipping
     static size_t line_buffer_size = 0;
@@ -2998,6 +3023,10 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 28)
   PrintVertices(stack[3], stack[4], stack[5]);
   LoadVertices(stack[3], stack[4], stack[5]);
   GLenum mode = SetupRenderer(stack[2], stack[3]);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+  glDrawArrays(mode, 0, stack[5]);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDrawArrays(mode, 0, stack[5]);
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -3018,6 +3047,14 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 29)
   LoadIndices(stack[6], stack[7]);
   LoadVertices(stack[3], stack[4], stack[5]);
   GLenum mode = SetupRenderer(stack[2], stack[3]);
+  if (depthMask) {
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glDisable(GL_BLEND);
+    glDisable(GL_DITHER);
+    glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  mode = SetupRenderer(stack[2], stack[3]);
   glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -3941,6 +3978,18 @@ int main(int argc, char* argv[]) {
 	  SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
 	  assert(glcontext != NULL);
 
+    glGenRenderbuffers(2, depthRBOs);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRBOs[0]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, 640, 480);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRBOs[1]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, 640, 480);
+
+    glGenFramebuffers(1, &depthFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, depthRBOs[0]);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRBOs[1]);
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    assert(status == GL_FRAMEBUFFER_COMPLETE);
 
     glDisable(GL_CULL_FACE);
 //    glDepthFunc(GL_GEQUAL);

@@ -59,6 +59,24 @@ static const char* FragmentShader1Texture =
 "  }\n"
 "  color *= diffuse;\n"
 "  if (alphaTest && !(int(round(color.a * 255.0)) != 0)) { discard; }\n"
+#define SHADERS_DEPTH_4_4_4_4
+#ifdef SHADERS_DEPTH_4_4_4_4
+"  #define fmodf(x, y) mod(x, y)\n"
+"  highp float depth = float(0x1fCa) / float(0xFFFF);\n" // 1.0 - gl_FragCoord.z * gl_FragCoord.w;\n"
+"  highp float v = depth;\n"
+"  v *= float(0x100) - 1.0/float(0x100);\n"
+"  v /= float(0x10);\n"
+"  highp float r = fmodf(v, float(0x10));\n"
+"  v *= float(0x10);\n"
+"  highp float g = fmodf(v, float(0x10));\n"
+"  v = fmodf(v, 1.0);\n"
+"  v *= float(0x10);\n"
+"  highp float b = fmodf(v, float(0x10));\n"
+"  v *= float(0x10);\n"
+"  highp float a = fmodf(v, float(0x10));\n"
+"  color = vec4(r / 16.0, g / 16.0, b / 16.0, a / 16.0);\n"
+//"color = vec4(depth);\n"
+#endif
 "}\n";
 
 #endif
