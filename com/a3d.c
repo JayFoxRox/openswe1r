@@ -257,6 +257,15 @@ HACKY_COM_BEGIN(IA3d4, 0)
   esp += 3 * 4;
 HACKY_COM_END()
 
+// IA3d4 -> STDMETHOD_(ULONG,Release)			(THIS) PURE; // 2
+HACKY_COM_BEGIN(IA3d4, 2)
+  hacky_printf("Release\n");
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  //FIXME: Implement
+  eax = 0;
+  esp += 1 * 4;
+HACKY_COM_END()
+
 // IA3d4 -> STDMETHOD(GetHardwareCaps)				(THIS_ LPA3DCAPS_HARDWARE) PURE; // 11
 HACKY_COM_BEGIN(IA3d4, 11)
   hacky_printf("GetHardwareCaps\n");
@@ -864,6 +873,15 @@ HACKY_COM_BEGIN(IA3dSource, 61)
 HACKY_COM_END()
 
 
+
+// IA3dListener -> STDMETHOD_(ULONG,Release)			(THIS) PURE; // 2
+HACKY_COM_BEGIN(IA3dListener, 2)
+  hacky_printf("Release\n");
+  hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+  //FIXME: Implement
+  eax = 0;
+  esp += 1 * 4;
+HACKY_COM_END()
 
 // IA3dListener -> STDMETHOD(SetPosition3f)		(THIS_ A3DVAL, A3DVAL, A3DVAL) PURE; // 3
 HACKY_COM_BEGIN(IA3dListener, 3)
