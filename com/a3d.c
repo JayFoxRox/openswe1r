@@ -13,6 +13,12 @@
 #include "al.h"
 #include "alc.h"
 
+static float distanceModelScale = 1.0f;
+
+static float scaleDistance(float units) {
+  return units * distanceModelScale;
+}
+
 static void AL_APIENTRY alc_DeferUpdatesSOFT(void) {
   alcSuspendContext(alcGetCurrentContext());
 }
@@ -483,8 +489,17 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IA3d4, 36)
   hacky_printf("SetDistanceModelScale\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
-  //FIXME: Implement
+  hacky_printf("a 0x%" PRIX32 " (%f)\n", stack[2], *(float*)&stack[2]);
+
+  // OpenAL does not have an option to change the distance model.
+  // So whenever the game changes it, we'd have to iterate over all sources.
+  // As that would be annoying to implement, we simply assume that the game
+  // will always set the proper distance model at startup (which it does).
+  // We should probably check if this has been set before the first calls have
+  // been made, but just asserting the value is correct is good enough for now.
+  distanceModelScale = *(float*)&stack[2];
+  assert(distanceModelScale == 0.15f);
+
   eax = 0;
   esp += 2 * 4;
 HACKY_COM_END()
@@ -708,8 +723,8 @@ enum { // MaxMinDistance flags
   API(A3D_MUTE) =    0x00000001
 };
 
-  alSourcef(this->al_source, AL_REFERENCE_DISTANCE, a);
-  alSourcef(this->al_source, AL_MAX_DISTANCE, b);
+  alSourcef(this->al_source, AL_REFERENCE_DISTANCE, scaleDistance(a));
+  alSourcef(this->al_source, AL_MAX_DISTANCE, scaleDistance(b));
 
   if (stack[4] & API(A3D_MUTE)) {
     alSourcef(this->al_source, AL_MAX_GAIN, 0.0f);
