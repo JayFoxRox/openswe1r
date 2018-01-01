@@ -24,7 +24,9 @@
 #include "SDL.h"
 static SDL_Window* sdlWindow;
 
-#include <GL/glew.h>
+#include <GLES2/gl2.h>
+static GLuint depthRBOs[2];
+static GLuint depthFBO;
 
 #include "com/d3d.h"
 #include "com/ddraw.h"
@@ -327,7 +329,7 @@ static void UcCrashHook(void* uc, uint64_t address, uint32_t size, void* user_da
   sprintf(buf, "Bug: ecx=0x%08" PRIX32 ", at eip=0x%08" PRIX32 ". 0x%08" PRIX32 " 0x%08" PRIX32 " 0x%08" PRIX32 " 0x%08" PRIX32,
           ecx, eip,
           stack[0], stack[1], stack[2], stack[3]);
-  glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION, -1, buf);
+//  glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION, -1, buf);
 }
 
 static void PrintVertices(unsigned int vertexFormat, Address address, unsigned int count) {
@@ -376,6 +378,7 @@ bool depthMask;
 GLenum destBlend;
 GLenum srcBlend;
 bool alphaTest;
+bool textureSwizzle;
 uint32_t fogColor; // ARGB
 bool fogEnable;
 float fogStart;
@@ -420,6 +423,7 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
   glUniformMatrix4fv(glGetUniformLocation(program, "projectionMatrix"), 1, GL_FALSE, projectionMatrix);
 
   glUniform1i(glGetUniformLocation(program, "alphaTest"), alphaTest);
+  glUniform1i(glGetUniformLocation(program, "textureSwizzle"), textureSwizzle);
 
   glUniform1i(glGetUniformLocation(program, "fogEnable"), fogEnable);
   glUniform1f(glGetUniformLocation(program, "fogStart"), fogStart);
@@ -432,7 +436,7 @@ static GLenum SetupRenderer(unsigned int primitiveType, unsigned int vertexForma
   glUniform3fv(glGetUniformLocation(program, "clipScale"), 1, clipScale);
   glUniform3fv(glGetUniformLocation(program, "clipOffset"), 1, clipOffset);
 
-#if 1
+#if 0 //FIXME!!
   // Hack to disable texture if tex0 is used - doesn't work?!
   if (texCount == 0) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ONE);
@@ -1200,7 +1204,7 @@ HACKY_IMPORT_BEGIN(StretchBlt)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, stack[4], stack[5], 0, GL_BGR, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, stack[4], stack[5], 0, GL_RGB, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, previousTexture);
   } else {
 
@@ -1208,6 +1212,8 @@ HACKY_IMPORT_BEGIN(StretchBlt)
     printf("\n\n\n\nblt!!!!!!\n\n\n\n");
     glClearColor(1.0f,0.0f,1.0f,1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    assert(false);
 
     printf("Invalid destination!\n");
   }
@@ -2163,6 +2169,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     // nop
   }
 
+  GLbitfield clearMask = 0;
+
   if (d & API(DDBLT_COLORFILL)) {
     assert(!(this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)));
 
@@ -2185,6 +2193,10 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     glDepthMask(GL_TRUE);
     assert(bltfx->dwFillDepth = 0xFFFF);
     glClearDepthf(1.0f); //FIXME!!
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_DEPTH_BUFFER_BIT);
   }
 
@@ -2301,8 +2313,23 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
     assert(this->desc.lPitch == 2 * this->desc.dwWidth);
 
-    uint8_t* pixel_buffer = Memory(this->desc.lpSurface);
-    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    uint8_t* pixel_buffer_ref = Memory(this->desc.lpSurface); 
+    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, pixel_buffer_ref);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    uint8_t* pixel_buffer = malloc(this->desc.dwWidth*this->desc.dwHeight*4);
+    glReadPixels(0, 0, this->desc.dwWidth, this->desc.dwHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixel_buffer);
+
+    uint32_t* b = pixel_buffer;
+    uint16_t* r = pixel_buffer_ref;
+    for(int y = 0; y < 480; y += 10) {
+      for(int x = 0; x < 640; x += 10) {
+        printf("%d, %d: 0x%08X == 0x%04X [ref]\n", x, y, b[y * this->desc.dwWidth + x], r[y * this->desc.dwWidth + x]);
+      }
+    }
+
+    free(pixel_buffer);
+    pixel_buffer = pixel_buffer_ref;
 
     // Reserve a buffer for swapping lines during image flipping
     static size_t line_buffer_size = 0;
@@ -2370,12 +2397,22 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   if (desc->ddpfPixelFormat.dwRGBBitCount == 32) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    texture->swizzle = false;
   } else {
     if (desc->ddpfPixelFormat.dwRGBAlphaBitMask == 0x8000) {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, Memory(desc->lpSurface));
+      //FIXME: Do this properly [buffer size + how copy size is calculated etc]
+      uint16_t swap_buffer[1024*1024];
+      unsigned int c = desc->dwWidth * desc->dwHeight;
+      memcpy(swap_buffer, Memory(desc->lpSurface), 2 * c);
+      for(unsigned int i = 0; i < c; i++) {
+        swap_buffer[i] = (swap_buffer[i] << 1) | (swap_buffer[i] >> 15);
+      }
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, swap_buffer);
+      texture->swizzle = false;
     } else {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, Memory(desc->lpSurface));
+      texture->swizzle = true;
     }
   }
   glBindTexture(GL_TEXTURE_2D, previousTexture);
@@ -2986,6 +3023,10 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 28)
   PrintVertices(stack[3], stack[4], stack[5]);
   LoadVertices(stack[3], stack[4], stack[5]);
   GLenum mode = SetupRenderer(stack[2], stack[3]);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+  glDrawArrays(mode, 0, stack[5]);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDrawArrays(mode, 0, stack[5]);
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -3006,6 +3047,14 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 29)
   LoadIndices(stack[6], stack[7]);
   LoadVertices(stack[3], stack[4], stack[5]);
   GLenum mode = SetupRenderer(stack[2], stack[3]);
+  if (depthMask) {
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glDisable(GL_BLEND);
+    glDisable(GL_DITHER);
+    glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  mode = SetupRenderer(stack[2], stack[3]);
   glDrawElements(mode, stack[7], GL_UNSIGNED_SHORT, NULL);
 
   eax = 0; // FIXME: No idea what this expects to return..
@@ -3024,6 +3073,8 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 38)
     API(Direct3DTexture2)* texture = Memory(b);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture->handle);
+    textureSwizzle = texture->swizzle;
+printf("Setting texture swizzle to %d for %d\n", textureSwizzle, texture->handle);
   } else {
     glBindTexture(GL_TEXTURE_2D, 0); // FIXME: I believe this is supposed to be white?!
   }
@@ -3109,7 +3160,8 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 5)
   API(Direct3DTexture2)* this = Memory(stack[1]);
   API(Direct3DTexture2)* a = Memory(stack[2]);
   //FIXME: Dirty hack..
-  this->handle = a->handle;
+  memcpy(this, a, sizeof(API(Direct3DTexture2)));
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
@@ -3181,7 +3233,7 @@ HACKY_COM_BEGIN(IDirect3DViewport3, 20)
     float b = (clearColor & 0xFF) / 255.0f;
 
     glClearStencil(stencilValue);
-    glClearDepth(zValue);
+    glClearDepthf(zValue);
     glClearColor(r, g, b, a);
     glClear(((flags & API(D3DCLEAR_TARGET)) ? GL_COLOR_BUFFER_BIT : 0) |
             ((flags & API(D3DCLEAR_ZBUFFER)) ? GL_DEPTH_BUFFER_BIT : 0) |
@@ -3913,9 +3965,9 @@ int main(int argc, char* argv[]) {
 		  style |= SDL_WINDOW_FULLSCREEN;
     }
 
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+	  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 	  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -3926,21 +3978,18 @@ int main(int argc, char* argv[]) {
 	  SDL_GLContext glcontext = SDL_GL_CreateContext(sdlWindow);
 	  assert(glcontext != NULL);
 
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-      fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
-      return 1;
-    }
+    glGenRenderbuffers(2, depthRBOs);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRBOs[0]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, 640, 480);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthRBOs[1]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, 640, 480);
 
-
-    //FIXME: This is ugly but gets the job done.. for now
-    static GLuint vao = 0;
-    if (vao == 0) {
-      glGenVertexArrays(1, &vao);
-    }
-    glBindVertexArray(vao);
-
+    glGenFramebuffers(1, &depthFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, depthRBOs[0]);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRBOs[1]);
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    assert(status == GL_FRAMEBUFFER_COMPLETE);
 
     glDisable(GL_CULL_FACE);
 //    glDepthFunc(GL_GEQUAL);
