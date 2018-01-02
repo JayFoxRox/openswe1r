@@ -294,7 +294,7 @@ enum {
   API(A3D_DISABLE_FOCUS_MUTE) =   0x00000400
 };
 
-  caps->dwFlags = API(A3D_1ST_REFLECTIONS); // | API(A3D_DIRECT_PATH_A3D);
+  caps->dwFlags = API(A3D_1ST_REFLECTIONS) | API(A3D_DIRECT_PATH_A3D);
   caps->dwOutputChannels = 2;
   caps->dwMinSampleRate = 0;
   caps->dwMaxSampleRate = 96000;
@@ -405,6 +405,13 @@ HACKY_COM_BEGIN(IA3d4, 18)
   alGenSources(1, &source->al_source);
   source->vtable = vtable;
 
+#if 1
+  // This is a dirty hack to silence duplicated sources
+  //FIXME: Remove
+  source->event_handle = 100;
+  alSourcef(source->al_source, AL_GAIN, 0.0f);
+#endif
+
   *(Address*)Memory(stack[3]) = addr;  
 
   eax = 0;
@@ -450,6 +457,7 @@ HACKY_COM_BEGIN(IA3d4, 26)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   float f;
   alGetListenerf(AL_GAIN, &f);
+  printf("Retrieving %f\n", f);
   *(float*)Memory(stack[2]) = f;
   eax = 0;
   esp += 2 * 4;
@@ -519,6 +527,10 @@ HACKY_COM_BEGIN(IA3dSource, 2)
   hacky_printf("Release\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   //FIXME: Implement
+
+  A3DSOURCE* this = Memory(stack[1]);
+  alSourceStop(this->al_source);
+
   eax = 0;
   esp += 1 * 4;
 HACKY_COM_END()
@@ -625,10 +637,14 @@ HACKY_COM_BEGIN(IA3dSource, 12)
   assert(this->fmt.wFormatTag == 0x0001);
   assert(this->fmt.nBlockAlign == (this->fmt.nChannels * this->fmt.wBitsPerSample / 8));
 
+  fprintf(stderr,"unlock buffer\n");
+  alSourceStop(this->al_source);
+  alSourcei(this->al_source, AL_BUFFER, 0);
   alBufferData(this->al_buffer, al_format, Memory(stack[2]), stack[3], this->fmt.nSamplesPerSec);
 
   //FIXME: assert that this source isn't already playing etc.
   alSourcei(this->al_source, AL_BUFFER, this->al_buffer);
+  fprintf(stderr,"unlock buffer.. ok\n");
 
   assert(stack[4] == 0);
   assert(stack[5] == 0);
@@ -745,11 +761,11 @@ HACKY_COM_BEGIN(IA3dSource, 40)
   A3DSOURCE* this = Memory(stack[1]);
 
   //FIXME: This is a hack to disable streaming audio
-  if (this->event_handle != 0) {
+  if (this->event_handle == 0) {
     
 
     //FIXME: the game only seems to set this to very silent values currently. probably a bug elsewhere..
-  //  alSourcef(this->al_source, AL_GAIN, a);
+    alSourcef(this->al_source, AL_GAIN, a);
 
   }
 
@@ -797,7 +813,7 @@ HACKY_COM_BEGIN(IA3dSource, 53)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
 
   //FIXME: Some functions check if this is a native source (0x20)
-  *(uint32_t*)Memory(stack[2]) = 0;
+  *(uint32_t*)Memory(stack[2]) = 0x20;
 
   eax = 0;
   esp += 2 * 4;
@@ -883,6 +899,7 @@ HACKY_COM_BEGIN(IA3dSource, 61)
   hacky_printf("SetTransformMode\n");
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+  assert(stack[2] == 0);
   eax = 0;
   esp += 2 * 4;
 HACKY_COM_END()
