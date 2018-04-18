@@ -42,10 +42,17 @@ add_executable(openswe1r
 )
 
 if(USE_VM)
-  target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
-  target_sources(openswe1r PUBLIC
-    uc_kvm.c
-  )
+  if (WIN32)
+    target_compile_definitions(openswe1r PUBLIC -DUC_WHV)
+    target_sources(openswe1r PUBLIC
+      uc_whv.c
+    )
+  else()
+    target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
+    target_sources(openswe1r PUBLIC
+      uc_kvm.c
+    )
+  endif()
 else()
   target_link_libraries(openswe1r
     ${LIBUNICORN_LIBRARY}
