@@ -188,7 +188,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
 
   // Load a small bios which boots CPU into protected mode
   uint8_t* bios = memalign(0x100000, bios_size);
-  FILE* f = fopen("uc_kvm_loader", "rb");
+  FILE* f = fopen("uc_vm_loader", "rb");
   assert(f != NULL);
   fread(bios, 1, bios_size, f);
   fclose(f);
@@ -208,7 +208,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
 
   // Prepare CPU State
-   struct kvm_regs regs = { 0 };
+  struct kvm_regs regs = { 0 };
 
   regs.rax = 0;
   regs.rbx = 0;
@@ -229,7 +229,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   ioctl(u->vcpu_fd, KVM_RUN, 0);
   printf("exit reason: %d\n", u->run->exit_reason);
   printRegs(u);
-  assert(u->run->exit_reason == KVM_EXIT_IO);
+  assert(u->run->exit_reason == KVM_EXIT_HLT);
 
   // Enable signals
   sigset_t set;
