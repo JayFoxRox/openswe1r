@@ -22,11 +22,12 @@
 #include <errno.h>
 #include <string.h>
 
-#include <haxm/hax_interface.h>
+#include <hax-interface.h>
 
 #ifdef WIN32
 
-typedef HANDLE HaxFd;
+typedef HANDLE hax_fd;
+#include <hax-win32.h>
 
 static char* hax_path() {
 #define HAX_DEVFS "\\\\.\\HAX"
@@ -51,8 +52,8 @@ static char* hax_vcpu_path(uint32_t vm_id, uint32_t vcpu_id) {
   return name;
 }
 
-static HaxFd hax_open(const char* path) {
-  HaxFd fd = CreateFile(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+static hax_fd hax_open(const char* path) {
+  hax_fd fd = CreateFile(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
   if (fd == INVALID_HANDLE_VALUE) {
     DWORD errNum = GetLastError();
     if (errno == ERROR_FILE_NOT_FOUND) {
@@ -65,11 +66,11 @@ static HaxFd hax_open(const char* path) {
   return fd;
 }
 
-static void hax_close(HaxFd fd) {
+static void hax_close(hax_fd fd) {
   CloseHandle(fd);
 }
 
-int hax_ioctl(HaxFd fildes, int request, void* data, unsigned int size) {
+int hax_ioctl(hax_fd fildes, int request, void* data, unsigned int size) {
   DWORD dSize = 0;
   int ret = DeviceIoControl(filedes, request, NULL, 0, data, size, &dSize, (LPOVERLAPPED) NULL);
   return ret;
@@ -77,10 +78,11 @@ int hax_ioctl(HaxFd fildes, int request, void* data, unsigned int size) {
 
 #else
 
-typedef int HaxFd;
+typedef int hax_fd;
+#include <hax-darwin.h>
 
-static HaxFd hax_open(const char* path) {
-  HaxFd fd = open(path, O_RDWR);
+static hax_fd hax_open(const char* path) {
+  hax_fd fd = open(path, O_RDWR);
   if (fd == -1) {
     std::fprintf(stderr, "HAXM: Failed to open the hax interface: '%s'\n", path);
   } else {
@@ -90,11 +92,11 @@ static HaxFd hax_open(const char* path) {
   return fd;
 }
 
-static void hax_close(HaxFd fd) {
+static void hax_close(hax_fd fd) {
   close(fd);
 }
 
-int hax_ioctl(HaxFd fildes, int request, void* data, unsigned int size) {
+int hax_ioctl(hax_fd fildes, int request, void* data, unsigned int size) {
   int ret = ioctl(filedes, request, data);
   return ret;
 }
@@ -103,9 +105,9 @@ int hax_ioctl(HaxFd fildes, int request, void* data, unsigned int size) {
 
 typedef struct {
   unsigned int mem_slots;
-  HaxFd fd;
-  HaxFd vm_fd;
-  HaxFd vcpu_fd;
+  hax_fd fd;
+  hax_fd vm_fd;
+  hax_fd vcpu_fd;
   hax_tunnel* haxm_tunnel;
   hax_tunnel_info haxm_tunnel_info;
 } uc_engine_haxm;
