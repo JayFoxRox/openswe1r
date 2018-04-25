@@ -42,16 +42,15 @@ add_executable(openswe1r
 )
 
 if(USE_VM)
+  target_compile_definitions(openswe1r PUBLIC -DUC_VM)
   if (WIN32)
-    target_compile_definitions(openswe1r PUBLIC -DUC_WHV)
-    target_sources(openswe1r PUBLIC
-      uc_whv.c
-    )
+    include_directories(SYSTEM depends/haxm/include)
+    #target_compile_definitions(openswe1r PUBLIC -DUC_WHV)
+    target_sources(openswe1r PUBLIC uc_haxm.c)
+  elseif (APPLE)
+    #FIXME!
   else()
-    target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
-    target_sources(openswe1r PUBLIC
-      uc_kvm.c
-    )
+    target_sources(openswe1r PUBLIC uc_kvm.c)
   endif()
 else()
   target_link_libraries(openswe1r

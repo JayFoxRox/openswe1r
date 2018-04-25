@@ -21,74 +21,22 @@
 
 #include <windows.h>
 
-typedef struct _cbe {
-  struct _cbe* next;
-  unsigned int hook_index;
-  bool removed;
-  int type;
-  void *callback;
-  void *user_data;
-  uint64_t begin;
-  uint64_t end;
-  union {
-    int insn; // UC_HOOK_INSN
-  } extra;
-} cbe; // callback entry
-
 typedef struct {
-  unsigned int hook_index;
   unsigned int mem_slots;
   WHV_PARTITION_HANDLE partition;
-  unsigned int vp_index;
-  cbe* cb_head;
+  UINT32 vp_index;
 } uc_engine_whv;
 
-static void nopSignalHandler() {
-  // We don't actually need to do anything here, but we need to interrupt
-  // the execution of the guest.
-}
-
-static void printRegs(uc_engine_whv* kvm) {
-  struct kvm_regs regs;
-  struct kvm_sregs sregs;
-  int r = ioctl(kvm->vcpu_fd, KVM_GET_REGS, &regs);
-  int s = ioctl(kvm->vcpu_fd, KVM_GET_SREGS, &sregs);
-  if (r == -1 || s == -1) {
-    fprintf(stderr, "Get Regs failed");
-    return;
-  }
-  printf("rax: 0x%08llx\n", regs.rax);
-  printf("rbx: 0x%08llx\n", regs.rbx);
-  printf("rcx: 0x%08llx\n", regs.rcx);
-  printf("rdx: 0x%08llx\n", regs.rdx);
-  printf("rsi: 0x%08llx\n", regs.rsi);
-  printf("rdi: 0x%08llx\n", regs.rdi);
-  printf("rsp: 0x%08llx\n", regs.rsp);
-  printf("rbp: 0x%08llx\n", regs.rbp);
-  printf("rip: 0x%08llx\n", regs.rip);
-  printf("rflags: 0x%08llx\n", regs.rflags);
-  printf("=====================\n");
-  printf("cr0: 0x%016llx\n", sregs.cr0);
-  printf("cr2: 0x%016llx\n", sregs.cr2);
-  printf("cr3: 0x%016llx\n", sregs.cr3);
-  printf("cr4: 0x%016llx\n", sregs.cr4);
-  printf("cr8: 0x%016llx\n", sregs.cr8);
-  printf("gdt: 0x%04x:0x%08llx\n", sregs.gdt.limit, sregs.gdt.base);
-  printf("cs: 0x%08llx ds: 0x%08llx es: 0x%08llx\nfs: 0x%08llx gs: 0x%08llx ss: 0x%08llx\n",
-       sregs.cs.base, sregs.ds.base, sregs.es.base, sregs.fs.base, sregs.gs.base, sregs.ss.base);
-}
 
 
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   uc_engine_whv* u = malloc(sizeof(uc_engine_whv));
   int r;
 
-  u->hook_index = 0;
   u->fd = -1;
   u->vcpu_fd = -1;
   u->vm_fd = -1;
   u->run = NULL;
-  u->cb_head = NULL;
   u->mem_slots = 0;
 
   HRESULT ret;
@@ -140,70 +88,6 @@ uc_err uc_close(uc_engine *uc) {
   //FIXME: Close WHV and shit
   free(uc);
   return 0;
-}
-
-uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *user_data, uint64_t begin, uint64_t end, ...) {
-  uc_engine_whv* u = (uc_engine_whv*)uc;
-
-  // Note that the original UC code also does an & comparison here..
-  //FIXME: This must scan all flags in proper order
-
-  cbe* cb = malloc(sizeof(cbe));
-  cb->removed = false;
-  cb->hook_index = u->hook_index++;
-  cb->type = type;
-  cb->callback = callback;
-  cb->user_data = user_data;
-  cb->begin = begin;
-  cb->end = end;
-
-  if (type & UC_HOOK_INSN) {
-    //FIXME: Assert UC_X86_INS_OUT or UC_X86_INS_IN
-
-    va_list valist;
-
-    va_start(valist, end);
-    int insn = va_arg(valist, int);
-    va_end(valist);
-
-    assert((insn == UC_X86_INS_IN) || (insn == UC_X86_INS_OUT));
-
-    cb->extra.insn = insn;
-  } else if (type & UC_HOOK_MEM_READ_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_READ_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_PROT) {
-    assert(false); //FIXME: This could be done
-  } else {
-    printf("Unsupported hook type: %d\n", type);
-    assert(false);
-  }
-
-  // Link hook into list
-  cb->next = u->cb_head;
-  u->cb_head = cb;
-
-  *hh = cb->hook_index;
-  return UC_ERR_OK;
-}
-uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
-  uc_engine_whv* u = (uc_engine_whv*)uc;
-  cbe* cb = u->cb_head;
-  while(cb != NULL) {
-    if (cb->hook_index == hh) {
-      cb->removed = true;
-      break;
-    }
-    cb = cb->next;
-  }
-  return UC_ERR_OK;
 }
 
 uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
