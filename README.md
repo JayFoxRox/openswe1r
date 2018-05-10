@@ -1,67 +1,80 @@
-[![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/OpenSWE1R)       
+# OpenSWE1R
+*An Open-Source port of the 1999 Game ["Star Wars: Episode 1 Racer"](https://en.wikipedia.org/wiki/Star_Wars_Episode_I:_Racer)*
 
+OpenSWE1R is a number of projects related to "Star Wars: Episode 1 Racer".
+We foster a community which focuses on understanding and enhancing the original game.
 
-[![Gitter Chat](https://img.shields.io/badge/Gitter-Chat-blue.svg)](https://gitter.im/OpenSWE1R)
+Our core-project is an Open-Source port of the game to the C programming language.
+
+---
+
+[![Gitter Chat](https://img.shields.io/badge/Gitter-Chat-red.svg)](https://gitter.im/OpenSWE1R)
 [![CLA assistant](https://cla-assistant.io/readme/badge/OpenSWE1R/openswe1r)](https://cla-assistant.io/OpenSWE1R/openswe1r)
 [![AppVeyor CI](https://img.shields.io/appveyor/ci/JayFoxRox82949/openswe1r/master.svg?label=AppVeyor%20CI)](https://ci.appveyor.com/project/JayFoxRox82949/openswe1r/branch/master)
 [![Travis CI](https://img.shields.io/travis/OpenSWE1R/openswe1r/master.svg?label=Travis%20CI)](https://travis-ci.org/OpenSWE1R/openswe1r)
 
+---
+
+<p align="center">
+<img alt="Screenshots of OpenSWE1R running on Linux" src="http://jannikvogel.de/scratchpad/openswe1r.svg" />
+</p>
 
 ---
 
-### OpenSWE1R
-*An Open-Source port of the 1999 Game ["Star Wars: Episode 1 Racer"](https://en.wikipedia.org/wiki/Star_Wars_Episode_I:_Racer)*
+### Community
 
-![Screenshots of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/openswe1r.svg)
+OpenSWE1R hosts [a chat on gitter.im](https://gitter.im/OpenSWE1R).
 
-### Details
+You only need a GitHub or Twitter account to access the chat.
 
-OpenSWE1R is a collection of projects related to "Star Wars: Episode 1 Racer".
-The core-project is an Open-Source port of the game to the C / C++ programming language.
+There is also an [IRC bridge](https://irc.gitter.im/) available.
+
+The chat is used discuss all OpenSWE1R projects, but we also talk about other aspects of "Star Wars: Episode 1 Racer".
+
+---
+
+### Projects
+
+To make the Open-Source port possible, we have to do a lot of research and reverse engineering.
+Therefore OpenSWE1R is split into smaller side-projects and repositories.
+
+Most research and reverse engineering happens in the [swe1r-re repository](https://github.com/OpenSWE1R/swe1r-re).
+Based on our research, we also work on tools which can be found in the [swe1r-tools repository](https://github.com/OpenSWE1R/swe1r-tools).
+
+To see which side-projects we currently work on, check out the [list of projects](https://github.com/orgs/OpenSWE1R/projects).
+
+We also work with [other resources and projects](https://github.com/OpenSWE1R/openswe1r/wiki/Useful-Resources).
 
 #### Emulation
 
 OpenSWE1R contains emulation which is a mix of console emulation and something like [WINE](https://www.winehq.org/).
 We have implemented emulation of the x86 CPU and Windows functionality used by the game.
-It makes the game fully cross-platform due to the CPU and API abstraction.
+This emulation makes the game's PC version work on almost any platform.
+
 You still need the original game files to run the game with our emulation.
 
 The emulation is part of the core-project and contained in this repository.
 
-[To see the current progress on our Emulation, check out the related project tracker](https://github.com/orgs/OpenSWE1R/projects/1).
+Check out the [related project tracker](https://github.com/orgs/OpenSWE1R/projects/1) to follow our progress.
 
-#### Open-Source Rewrite
+#### Rewrite
 
 OpenSWE1R aims to replace all of the original game code with Open-Source code.
 This is similar to the approach used by [OpenRCT2](https://openrct2.website/).
-The goal is to replace the x86 Windows Version of the game ("swep1rcr.exe").
+The goal is to rewrite the PC version of the game ("swep1rcr.exe") under an Open-Source license.
 It's possible that support for other versions (Mac / Dreamcast / N64) will be added later.
-While this replaces games code / logic, you still need the original game for its art assets: levels, sounds, ...
+
+As this only replaces the code, you still need the original game for its art assets: levels, sounds, ...
 
 The rewrite is part of the core-project and contained in this repository.
 
-[To see the current progress on our Open-Source Rewrite, check out the related project tracker](https://github.com/orgs/OpenSWE1R/projects/2).
+Check out the [related project tracker](https://github.com/orgs/OpenSWE1R/projects/2) to follow our progress.
 
-#### Other Projects
+---
 
-To make the core-project possible, we have to do a lot of research and reverse engineering.
-This is split into seperate side-projects and repositories.
+## Requirements
 
-Most research and [reverse engineering happens in the swe1r-re repository](https://github.com/OpenSWE1R/swe1r-re).
-Based on this research, we also [work on tools, which can be found in the swe1r-tools repository](https://github.com/OpenSWE1R/swe1r-tools).
-
-More projects are added as new people join our effort.
-
-[To see which side-projects we currently work on, check out the list of projects](https://github.com/orgs/OpenSWE1R/projects).
-We also work with [external projects and other resources](https://github.com/OpenSWE1R/openswe1r/wiki/Useful-Resources).
-
-#### Community
-
-OpenSWE1R hosts [a chat on gitter.im, for questions and technical discussions about "Star Wars: Episode 1 Racer" and OpenSWE1R development](https://gitter.im/OpenSWE1R) ([IRC bridge](https://irc.gitter.im/)).
-
-### Requirements
-
-To build our Open-Source port, you will need the following software:
+To use our Open-Source port, you will need the following software:
 
 **System**
 
@@ -80,11 +93,11 @@ To build our Open-Source port, you will need the following software:
 * [GLEW](http://glew.sourceforge.net/)
 * [OpenAL](https://www.openal.org/)
 
-### Getting Started
+## Getting Started
 
 Read our ["Getting Started" guide on the wiki](https://github.com/OpenSWE1R/openswe1r/wiki/Getting-Started) to learn how to build and run OpenSWE1R.
 
-### Contribute
+## Contribute
 
 Due to the large scope of the project, there are various tasks which can be worked on.
 Some of these tasks are very suitable for beginners and don't involve writing any code at all.
