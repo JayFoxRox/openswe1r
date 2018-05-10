@@ -4,7 +4,7 @@
 OpenSWE1R is a number of projects related to "Star Wars: Episode 1 Racer".
 We foster a community which focuses on understanding and enhancing the original game.
 
-Our core-project is an Open-Source port of the game to the C programming language.
+Our main project is an Open-Source port of the game to the C programming language.
 
 ---
 
@@ -25,58 +25,49 @@ Our core-project is an Open-Source port of the game to the C programming languag
 
 ### Community
 
-OpenSWE1R hosts [a chat on gitter.im](https://gitter.im/OpenSWE1R).
+OpenSWE1R hosts [a chat on gitter.im](https://gitter.im/OpenSWE1R). There is also an [IRC bridge](https://irc.gitter.im/).
 
 You only need a GitHub or Twitter account to access the chat.
 
-There is also an [IRC bridge](https://irc.gitter.im/) available.
-
 The chat is used discuss all OpenSWE1R projects, but we also talk about other aspects of "Star Wars: Episode 1 Racer".
 
+We also have [a Wiki](https://github.com/OpenSWE1R/openswe1r/wiki).
+
 ---
 
-### Projects
+To make the Open-Source port possible, we have to do a lot of research.
+Therefore OpenSWE1R is split into smaller projects and repositories.
 
-To make the Open-Source port possible, we have to do a lot of research and reverse engineering.
-Therefore OpenSWE1R is split into smaller side-projects and repositories.
+This repository contains the code for the Open-Source port.
+It consists of [the emulation](https://github.com/orgs/OpenSWE1R/projects/1) and [rewrite project](https://github.com/orgs/OpenSWE1R/projects/2).
 
 Most research and reverse engineering happens in the [swe1r-re repository](https://github.com/OpenSWE1R/swe1r-re).
-Based on our research, we also work on tools which can be found in the [swe1r-tools repository](https://github.com/OpenSWE1R/swe1r-tools).
+Based on our research, we also create tools which can be found in the [swe1r-tools repository](https://github.com/OpenSWE1R/swe1r-tools).
+We also work with [other external resources and projects](https://github.com/OpenSWE1R/openswe1r/wiki/Useful-Resources).
 
-To see which side-projects we currently work on, check out the [list of projects](https://github.com/orgs/OpenSWE1R/projects).
+Check out the [full list of projects](https://github.com/orgs/OpenSWE1R/projects) to follow the progress of our projects.
 
-We also work with [other resources and projects](https://github.com/OpenSWE1R/openswe1r/wiki/Useful-Resources).
+### Emulation
 
-#### Emulation
-
-OpenSWE1R contains emulation which is a mix of console emulation and something like [WINE](https://www.winehq.org/).
-We have implemented emulation of the x86 CPU and Windows functionality used by the game.
+OpenSWE1R implements emulation of x86 CPU portions and Windows functionality that is required by the game.
 This emulation makes the game's PC version work on almost any platform.
+Our approach is similar to console emulation and [WINE](https://www.winehq.org/).
 
-You still need the original game files to run the game with our emulation.
+### Rewrite
 
-The emulation is part of the core-project and contained in this repository.
-
-Check out the [related project tracker](https://github.com/orgs/OpenSWE1R/projects/1) to follow our progress.
-
-#### Rewrite
-
-OpenSWE1R aims to replace all of the original game code with Open-Source code.
-This is similar to the approach used by [OpenRCT2](https://openrct2.website/).
-The goal is to rewrite the PC version of the game ("swep1rcr.exe") under an Open-Source license.
+OpenSWE1R aims to rewrite the PC version of the game ("swep1rcr.exe") under an Open-Source license.
 It's possible that support for other versions (Mac / Dreamcast / N64) will be added later.
-
-As this only replaces the code, you still need the original game for its art assets: levels, sounds, ...
-
-The rewrite is part of the core-project and contained in this repository.
-
-Check out the [related project tracker](https://github.com/orgs/OpenSWE1R/projects/2) to follow our progress.
+Our approach is similar to the one which is used for [OpenRCT2](https://openrct2.website/).
 
 ---
 
-## Requirements
+## Getting Started
 
-To use our Open-Source port, you will need the following software:
+As this project only replaces the code, you still need the original game for its art assets: levels, graphics, sounds and more.
+However, there is a webdemo which you can use to try OpenSWE1R without buying the game.
+Read our ["Getting Started" guide on the Wiki](https://github.com/OpenSWE1R/openswe1r/wiki/Getting-Started) to learn how to get the game files, build and run OpenSWE1R.
+
+You will need the following software to use our Open-Source port:
 
 **System**
 
@@ -94,10 +85,6 @@ To use our Open-Source port, you will need the following software:
 * [SDL2](https://www.libsdl.org/)
 * [GLEW](http://glew.sourceforge.net/)
 * [OpenAL](https://www.openal.org/)
-
-## Getting Started
-
-Read our ["Getting Started" guide on the wiki](https://github.com/OpenSWE1R/openswe1r/wiki/Getting-Started) to learn how to build and run OpenSWE1R.
 
 ## Contribute
 
