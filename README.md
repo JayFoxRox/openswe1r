@@ -8,10 +8,12 @@ Our core-project is an Open-Source port of the game to the C programming languag
 
 ---
 
-[![Gitter Chat](https://img.shields.io/badge/Gitter-Chat-red.svg)](https://gitter.im/OpenSWE1R)
-[![CLA assistant](https://cla-assistant.io/readme/badge/OpenSWE1R/openswe1r)](https://cla-assistant.io/OpenSWE1R/openswe1r)
-[![AppVeyor CI](https://img.shields.io/appveyor/ci/JayFoxRox82949/openswe1r/master.svg?label=AppVeyor%20CI)](https://ci.appveyor.com/project/JayFoxRox82949/openswe1r/branch/master)
-[![Travis CI](https://img.shields.io/travis/OpenSWE1R/openswe1r/master.svg?label=Travis%20CI)](https://travis-ci.org/OpenSWE1R/openswe1r)
+<p align="center">
+<a href="https://gitter.im/OpenSWE1R"><img alt="Gitter Chat" src="https://img.shields.io/badge/Gitter-Chat-red.svg"></a>
+<a href="https://cla-assistant.io/OpenSWE1R/openswe1r"><img alt="CLA assistant" src="https://cla-assistant.io/readme/badge/OpenSWE1R/openswe1r"></a>
+<a href="https://ci.appveyor.com/project/JayFoxRox82949/openswe1r/branch/master"><img alt="AppVeyor CI" src="https://img.shields.io/appveyor/ci/JayFoxRox82949/openswe1r/master.svg?label=AppVeyor%20CI"></a>
+<a href="https://travis-ci.org/OpenSWE1R/openswe1r"><img alt="Travis CI" src="https://img.shields.io/travis/OpenSWE1R/openswe1r/master.svg?label=Travis%20CI"></a>
+</p>
 
 ---
 
