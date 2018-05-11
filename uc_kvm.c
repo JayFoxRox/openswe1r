@@ -52,44 +52,13 @@ static void nopSignalHandler() {
   // the execution of the guest.
 }
 
-static void printRegs(uc_engine_kvm* kvm) {
-  struct kvm_regs regs;
-  struct kvm_sregs sregs;
-  int r = ioctl(kvm->vcpu_fd, KVM_GET_REGS, &regs);
-  int s = ioctl(kvm->vcpu_fd, KVM_GET_SREGS, &sregs);
-  if (r == -1 || s == -1) {
-    fprintf(stderr, "Get Regs failed");
-    return;
-  }
-  printf("rax: 0x%08llx\n", regs.rax);
-  printf("rbx: 0x%08llx\n", regs.rbx);
-  printf("rcx: 0x%08llx\n", regs.rcx);
-  printf("rdx: 0x%08llx\n", regs.rdx);
-  printf("rsi: 0x%08llx\n", regs.rsi);
-  printf("rdi: 0x%08llx\n", regs.rdi);
-  printf("rsp: 0x%08llx\n", regs.rsp);
-  printf("rbp: 0x%08llx\n", regs.rbp);
-  printf("rip: 0x%08llx\n", regs.rip);
-  printf("rflags: 0x%08llx\n", regs.rflags);
-  printf("=====================\n");
-  printf("cr0: 0x%016llx\n", sregs.cr0);
-  printf("cr2: 0x%016llx\n", sregs.cr2);
-  printf("cr3: 0x%016llx\n", sregs.cr3);
-  printf("cr4: 0x%016llx\n", sregs.cr4);
-  printf("cr8: 0x%016llx\n", sregs.cr8);
-  printf("gdt: 0x%04x:0x%08llx\n", sregs.gdt.limit, sregs.gdt.base);
-  printf("cs: 0x%08llx ds: 0x%08llx es: 0x%08llx\nfs: 0x%08llx gs: 0x%08llx ss: 0x%08llx\n",
-       sregs.cs.base, sregs.ds.base, sregs.es.base, sregs.fs.base, sregs.gs.base, sregs.ss.base);
-}
-
-
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   uc_engine_kvm* u = malloc(sizeof(uc_engine_kvm));
   int r;
 
   u->fd = -1;
-  u->vcpu_fd = -1;
   u->vm_fd = -1;
+  u->vcpu_fd = -1;
   u->run = NULL;
   u->mem_slots = 0;
   u->thread = pthread_self();
@@ -115,9 +84,16 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
   u->vm_fd = fd;
   
+  // Load a small bios which boots CPU into protected mode
+  size_t bios_size = 0x1000;
+  uint8_t* bios = memalign(0x100000, bios_size);
+  FILE* f = fopen("uc_vm_loader", "rb");
+  assert(f != NULL);
+  fread(bios, 1, bios_size, f);
+  fclose(f);
+
   // Give intel it's required space, I think these addresses are unused.
 #if 1
-  size_t bios_size = 0x1000;
   uint64_t identity_base = 0xFFFFFFFF - (bios_size + 0x4000) + 1; // Needs room for bios + 4 pages
   r = ioctl(u->vm_fd, KVM_SET_IDENTITY_MAP_ADDR, &identity_base); // 1 page
   if (r < 0) {
@@ -167,15 +143,8 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
   u->run = (struct kvm_run*)map;
 
-
-  // Load a small bios which boots CPU into protected mode
-  uint8_t* bios = memalign(0x100000, bios_size);
-  FILE* f = fopen("uc_vm_loader", "rb");
-  assert(f != NULL);
-  fread(bios, 1, bios_size, f);
-  fclose(f);
-
-  uc_mem_map_ptr(uc, 0xFFFFFFFF - bios_size + 1, bios_size, UC_PROT_READ | UC_PROT_EXEC, bios);
+  // Map bios into address space
+  uc_mem_map_ptr(u, 0xFFFFFFFF - bios_size + 1, bios_size, UC_PROT_READ | UC_PROT_EXEC, bios);
 
   // Prepare CPU State
   struct kvm_regs regs = { 0 };
@@ -213,6 +182,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   *uc = (uc_engine*)u;
   return 0;
 }
+
 uc_err uc_close(uc_engine *uc) {
   uc_engine_kvm* u = (uc_engine_kvm*)uc;
   assert(false);
@@ -342,38 +312,38 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
   while (1) {
     ioctl(u->vcpu_fd, KVM_RUN, 0);
     switch(u->run->exit_reason) {
-      case KVM_EXIT_HLT:
-        return 0;
-      case KVM_EXIT_IO:
-        printRegs(u);
-        printf("Error accessing IO\n");
-        assert(false);
-        return -1;
-      case KVM_EXIT_MMIO:
-        printRegs(u);
-        printf("Error accessing 0x%08X\n", u->run->mmio.phys_addr);
-        assert(false);
-        return -2;
-      case KVM_EXIT_INTR:
-        printRegs(u);
-        printf("Interrupt\n");
-        assert(false);
-        return -3;
-      case KVM_EXIT_SHUTDOWN:
-        printRegs(u);
-        printf("Triple fault\n");
-        assert(false);
-        return -4;
-      case KVM_EXIT_FAIL_ENTRY:
-        printRegs(u);
-        printf("Failed to enter emulation: %llx\n", u->run->fail_entry.hardware_entry_failure_reason);
-        assert(false);
-        return -5;
-      default:
-        printRegs(u);
-        printf("unhandled exit reason: %i\n", u->run->exit_reason);
-        assert(false);
-        return -6;
+    case KVM_EXIT_HLT:
+      return 0;
+    case KVM_EXIT_IO:
+      printRegs(u);
+      printf("Error accessing IO\n");
+      assert(false);
+      return -1;
+    case KVM_EXIT_MMIO:
+      printRegs(u);
+      printf("Error accessing 0x%08X\n", u->run->mmio.phys_addr);
+      assert(false);
+      return -2;
+    case KVM_EXIT_INTR:
+      printRegs(u);
+      printf("Interrupt\n");
+      assert(false);
+      return -3;
+    case KVM_EXIT_SHUTDOWN:
+      printRegs(u);
+      printf("Triple fault\n");
+      assert(false);
+      return -4;
+    case KVM_EXIT_FAIL_ENTRY:
+      printRegs(u);
+      printf("Failed to enter emulation: %llx\n", u->run->fail_entry.hardware_entry_failure_reason);
+      assert(false);
+      return -5;
+    default:
+      printRegs(u);
+      printf("unhandled exit reason: %i\n", u->run->exit_reason);
+      assert(false);
+      return -6;
     }
   }
 }

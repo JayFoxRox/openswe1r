@@ -1,3 +1,8 @@
+// Copyright 2018 OpenSWE1R Maintainers
+// Licensed under GPLv2 or any later version
+// Refer to the included LICENSE.txt file.
+
+#if 0
 static void printRegs(uc_engine_kvm* kvm) {
   struct kvm_regs regs;
   struct kvm_sregs sregs;
@@ -114,4 +119,8 @@ static void printRegs(uc_engine_whv* whv) {
        regs.gs.Segment.Base,
        regs.ss.Segment.Base);
 }
+#endif
 
+static void printRegs(uc_engine* uc) {
+  printf("<printRegs not implemented>\n");
+}
