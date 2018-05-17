@@ -27,6 +27,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include "uc_vm.h"
+
 typedef struct {
   unsigned int mem_slots;
   pthread_t thread;
@@ -50,6 +52,64 @@ static int _kvm_print_cap(int fd, const char* title, unsigned int cap) {
 static void nopSignalHandler() {
   // We don't actually need to do anything here, but we need to interrupt
   // the execution of the guest.
+}
+
+/*
+struct kvm_segment {
+	__u64 base;
+	__u32 limit;
+	__u16 selector;
+	__u8  type;
+	__u8  present, dpl, db, s, l, g, avl;
+	__u8  unusable;
+	__u8  padding;
+};
+*/
+
+static void load_segment(struct kvm_segment* desc, uint16_t selector, uint64_t base, uint32_t limit, uint16_t ar) {
+
+  union {
+    struct {
+      uint32_t type:4;
+      uint32_t desc:1;
+      uint32_t dpl:2;
+      uint32_t present:1;
+      uint32_t:4;
+      uint32_t available:1;
+      uint32_t long_mode:1;
+      uint32_t operand_size:1;
+      uint32_t granularity:1;
+
+      uint32_t null:1;
+      uint32_t:15;
+    };
+    uint32_t ar;
+  } x;
+
+  x.ar = ar;
+
+  desc->selector = selector;
+  desc->base = base;
+  desc->limit = limit;
+  desc->type = x.type;
+  desc->present = x.present;
+  desc->dpl = x.dpl;
+  desc->db = x.operand_size;
+  desc->s = x.desc;
+  desc->l = x.long_mode;
+  desc->g = x.granularity;
+  desc->avl = x.available;
+
+	__u8  present, dpl, db, s, l, g, avl;
+	__u8  unusable;
+  return;
+}
+
+
+static void load_dtable(struct kvm_dtable* dtable, uint64_t base, uint16_t limit) {
+  dtable->base = base;
+  dtable->limit = limit;
+  return;
 }
 
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
@@ -87,10 +147,6 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   // Load a small bios which boots CPU into protected mode
   size_t bios_size = 0x1000;
   uint8_t* bios = memalign(0x100000, bios_size);
-  FILE* f = fopen("uc_vm_loader", "rb");
-  assert(f != NULL);
-  fread(bios, 1, bios_size, f);
-  fclose(f);
 
   // Give intel it's required space, I think these addresses are unused.
 #if 1
@@ -148,6 +204,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
 
   // Prepare CPU State
   struct kvm_regs regs = { 0 };
+  r = ioctl(u->vcpu_fd, KVM_GET_REGS, &regs);
 
   regs.rax = 0;
   regs.rbx = 0;
@@ -159,16 +216,37 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   regs.rbp = 0;
   // FIXME: regs.r8 - regs.r15 ?
 
-  regs.rflags = 2;
-  regs.rip = 0xFFF0;
-  r = ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);
+  //regs.rflags = 2;
+//  regs.rip = 0xFFF0;
 
+  struct kvm_sregs sregs = { 0 };
+  r = ioctl(u->vcpu_fd, KVM_GET_SREGS, &sregs);
+
+  sregs.cr0 |= 1; // Enable protected mode
+  load_dtable(&sregs.gdt, 0xFFFFF000, 0x18);
+  load_segment(&sregs.cs, 0x08, 0x00000000, 0xFFFFFFFF, 0xCF9B);
+  load_segment(&sregs.ds, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+  load_segment(&sregs.es, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+  load_segment(&sregs.ss, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+
+  regs.rflags = 2;
+
+  // Hack to land us in a HLT
+  regs.rip = 0xFFFFFFF0;
+  memset(bios, 0xF4, bios_size);
+
+  r = ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);
+  r = ioctl(u->vcpu_fd, KVM_SET_SREGS, &sregs);
+
+
+#if 1
   // Run CPU until it is ready
   printRegs(u);
   ioctl(u->vcpu_fd, KVM_RUN, 0);
   printf("exit reason: %d\n", u->run->exit_reason);
   printRegs(u);
   assert(u->run->exit_reason == KVM_EXIT_HLT);
+#endif
 
   // Enable signals
   sigset_t set;
