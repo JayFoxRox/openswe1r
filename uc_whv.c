@@ -1,4 +1,4 @@
-// Copyright 2017 OpenSWE1R Maintainers
+// Copyright 2018 OpenSWE1R Maintainers
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
@@ -9,23 +9,17 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <linux/kvm.h>
 #include <malloc.h>
 #include <assert.h>
 #include <stdint.h>
 #include <stropts.h>
-#include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <pthread.h>
 #include <errno.h>
 #include <string.h>
+
+#include <windows.h>
 
 typedef struct _cbe {
   struct _cbe* next;
@@ -44,31 +38,17 @@ typedef struct _cbe {
 typedef struct {
   unsigned int hook_index;
   unsigned int mem_slots;
-  pthread_t thread;
-  int fd;
-  int vm_fd;
-  int vcpu_fd;
-  struct kvm_run *run;
+  WHV_PARTITION_HANDLE partition;
+  unsigned int vp_index;
   cbe* cb_head;
-} uc_engine_kvm;
-
-static int _kvm_print_cap(int fd, const char* title, unsigned int cap) {
-  int r = ioctl(fd, KVM_CHECK_EXTENSION, cap);
-  if (r == -1) {
-    fprintf(stderr, "%s: %s\n", title, strerror(errno));
-    return -1;
-  }
-  printf("%s = %d\n", title, r);
-  return r;
-}
-#define kvm_print_cap(kvm, cap) _kvm_print_cap(kvm, #cap, cap)
+} uc_engine_whv;
 
 static void nopSignalHandler() {
   // We don't actually need to do anything here, but we need to interrupt
   // the execution of the guest.
 }
 
-static void printRegs(uc_engine_kvm* kvm) {
+static void printRegs(uc_engine_whv* kvm) {
   struct kvm_regs regs;
   struct kvm_sregs sregs;
   int r = ioctl(kvm->vcpu_fd, KVM_GET_REGS, &regs);
@@ -100,7 +80,7 @@ static void printRegs(uc_engine_kvm* kvm) {
 
 
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
-  uc_engine_kvm* u = malloc(sizeof(uc_engine_kvm));
+  uc_engine_whv* u = malloc(sizeof(uc_engine_whv));
   int r;
 
   u->hook_index = 0;
@@ -110,81 +90,13 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   u->run = NULL;
   u->cb_head = NULL;
   u->mem_slots = 0;
-  u->thread = pthread_self();
 
-  //FIXME: Only do this on the calling thread
-  signal(SIGUSR1, nopSignalHandler); // Prevent termination on USER1 signals
+  HRESULT ret;
 
-  int fd;
-  fd = open("/dev/kvm", O_RDWR);
-  if (fd == -1) {
-    perror("open /dev/kvm");
-    return -1;
-  }
-  u->fd = fd;
+  ret = WHvCreatePartition(&u->partition);
 
-  r = ioctl(u->fd, KVM_GET_API_VERSION, 0);
-  assert(r == 12);
-
-  fd = ioctl(u->fd, KVM_CREATE_VM, 0);
-  if (fd == -1) {
-    fprintf(stderr, "kvm_create_vm: %m\n");
-    return -2;
-  }
-  u->vm_fd = fd;
-  
-  // Give intel it's required space, I think these addresses are unused.
-#if 1
-  size_t bios_size = 0x1000;
-  uint64_t identity_base = 0xFFFFFFFF - bios_size - 0x4000 + 1; // Needs room for 5 pages
-  r = ioctl(u->vm_fd, KVM_SET_IDENTITY_MAP_ADDR, &identity_base); // 1 page
-  if (r < 0) {
-    fprintf(stderr, "Error assigning Identity Map space: %m\n");
-    return -5;
-  }
-#endif
-#if 1
-  r = ioctl(u->vm_fd, KVM_SET_TSS_ADDR, identity_base + 0x1000); // 3 pages
-  if (r < 0) {
-    fprintf(stderr, "Error assigning TSS space: %m\n");
-    return -6;
-  }
-#endif
-
-  r = ioctl(u->vm_fd, KVM_CREATE_VCPU, 0);
-  if (r == -1) {
-    fprintf(stderr, "kvm_create_vcpu: %m\n");
-    return -7;
-  }
-  u->vcpu_fd = r;
-
-#ifdef KVM_CAP_IMMEDIATE_EXIT
-  kvm_print_cap(u->vm_fd, KVM_CAP_IMMEDIATE_EXIT);
-#endif
-  kvm_print_cap(u->vm_fd, KVM_CAP_NR_VCPUS);
-  kvm_print_cap(u->vm_fd, KVM_CAP_MAX_VCPUS);
-  kvm_print_cap(u->vm_fd, KVM_CAP_ADJUST_CLOCK);
-  kvm_print_cap(u->vm_fd, KVM_CAP_TSC_CONTROL);
-  kvm_print_cap(u->vm_fd, KVM_CAP_TSC_DEADLINE_TIMER);
-  kvm_print_cap(u->vm_fd, KVM_CAP_READONLY_MEM);
-  kvm_print_cap(u->vm_fd, KVM_CAP_SET_IDENTITY_MAP_ADDR);
-  kvm_print_cap(u->vm_fd, KVM_CAP_SET_TSS_ADDR);
-  kvm_print_cap(u->vm_fd, KVM_CAP_SET_GUEST_DEBUG);
-  kvm_print_cap(u->vm_fd, KVM_CAP_IRQCHIP);
-  kvm_print_cap(u->vm_fd, KVM_CAP_NR_MEMSLOTS);
-
-  long mmap_size = ioctl(u->fd, KVM_GET_VCPU_MMAP_SIZE, 0);
-  if (mmap_size == -1) {
-    fprintf(stderr, "get vcpu mmap size: %m\n");
-    return -8;
-  }
-  void *map = mmap(NULL, mmap_size, PROT_READ|PROT_WRITE, MAP_SHARED, u->vcpu_fd, 0);
-  if (map == MAP_FAILED) {
-    fprintf(stderr, "mmap vcpu area: %m\n");
-    return -9;
-  }
-  u->run = (struct kvm_run*)map;
-
+  u->vp_index = 0;
+  ret = WHvCreateVirtualProcessor(u->partition, u->vp_index, 0);
 
   // Load a small bios which boots CPU into protected mode
   uint8_t* bios = memalign(0x100000, bios_size);
@@ -192,20 +104,8 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   assert(f != NULL);
   fread(bios, 1, bios_size, f);
   fclose(f);
-  struct kvm_userspace_memory_region memory = {
-    .memory_size = bios_size,
-    .guest_phys_addr = 0xFFFFFFFF - bios_size + 1,
-    .userspace_addr = (uintptr_t)bios,
-    .flags = 0, //FIXME: Look at perms?
-    .slot = u->mem_slots++,
-  };
-  
-  r = ioctl(u->vm_fd, KVM_SET_USER_MEMORY_REGION, &memory);
-  if (r == -1) {
-    fprintf(stderr, "Error mapping memory: %m\n");
-    assert(false);
-    return -1;
-  }
+
+  ret = WHvMapGpaRange(u->partition, bios, 0xFFFFFFFF - bios_size + 1, bios_size, WHvMapGpaRangeFlagRead | WHvMapGpaRangeFlagExecute);
 
   // Prepare CPU State
   struct kvm_regs regs = { 0 };
@@ -226,33 +126,24 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
 
   // Run CPU until it is ready
   printRegs(u);
-  ioctl(u->vcpu_fd, KVM_RUN, 0);
-  printf("exit reason: %d\n", u->run->exit_reason);
+  WHV_RUN_VP_EXIT_CONTEXT exit_context;
+  ret = WHvRunVirtualProcessor(u->partition, u->vp_index, &exit_context, sizeof(exit_context));
   printRegs(u);
-  assert(u->run->exit_reason == KVM_EXIT_HLT);
-
-  // Enable signals
-  sigset_t set;
-  sigemptyset(&set);
-  sigaddset(&set, SIGUSR1);
-  r = pthread_sigmask(SIG_UNBLOCK, &set, NULL);
-  if (r != 0) {
-    fprintf(stderr, "pthread_sigmask %m\n");
-  }
+  assert(exit_context.ExitReason == WHvRunVpExitReasonX64Halt);
 
   *uc = (uc_engine*)u;
   return 0;
 }
 uc_err uc_close(uc_engine *uc) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
   assert(false);
-  //FIXME: Close KVM and shit
+  //FIXME: Close WHV and shit
   free(uc);
   return 0;
 }
 
 uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *user_data, uint64_t begin, uint64_t end, ...) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
 
   // Note that the original UC code also does an & comparison here..
   //FIXME: This must scan all flags in proper order
@@ -303,7 +194,7 @@ uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *u
   return UC_ERR_OK;
 }
 uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
   cbe* cb = u->cb_head;
   while(cb != NULL) {
     if (cb->hook_index == hh) {
@@ -316,7 +207,7 @@ uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
 }
 
 uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
 
   assert(u->vcpu_fd != -1);
 
@@ -338,7 +229,7 @@ uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
   return 0;
 }
 uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
 
   assert(u->vcpu_fd != -1);
 
@@ -428,39 +319,33 @@ sregs.fs.limit = 0x1000;
   return 0;
 }
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
+  uc_engine_whv* u = (uc_engine_whv*)uc;
 
   int r;
   while (1) {
-    ioctl(u->vcpu_fd, KVM_RUN, 0);
-    switch(u->run->exit_reason) {
-      case KVM_EXIT_HLT:
+    HRESULT ret;
+
+    WHV_RUN_VP_EXIT_CONTEXT exit_context;
+    ret = WHvRunVirtualProcessor(u->partition, u->vp_index, &exit_context, sizeof(exit_context));
+
+    switch(exit_context.ExitReason) {
+      case WHvRunVpExitReasonX64Halt:
         return 0;
-      case KVM_EXIT_IO:
+      case WHvRunVpExitReasonX64IoPortAccess:
         printRegs(u);
         printf("Error accessing IO\n");
         assert(false);
         return -1;
-      case KVM_EXIT_MMIO:
+      case WHvRunVpExitReasonMemoryAccess:
         printRegs(u);
-        printf("Error accessing 0x%08X\n", u->run->mmio.phys_addr);
+        printf("Error accessing 0x%08X\n", exit_context.MemoryAccess.Gpa);
         assert(false);
         return -2;
-      case KVM_EXIT_INTR:
+      case WHvRunVpExitReasonX64InterruptWindow:
         printRegs(u);
-        printf("Interrupt\n");
+        printf("Interrupt window\n");
         assert(false);
         return -3;
-      case KVM_EXIT_SHUTDOWN:
-        printRegs(u);
-        printf("Triple fault\n");
-        assert(false);
-        return -4;
-      case KVM_EXIT_FAIL_ENTRY:
-        printRegs(u);
-        printf("Failed to enter emulation: %llx\n", u->run->fail_entry.hardware_entry_failure_reason);
-        assert(false);
-        return -5;
       default:
         printRegs(u);
         printf("unhandled exit reason: %i\n", u->run->exit_reason);
@@ -470,28 +355,25 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
   }
 }
 uc_err uc_emu_stop(uc_engine *uc) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-  pthread_kill(u->thread, SIGUSR1);
+  uc_engine_whv* u = (uc_engine_whv*)uc;
+  HRESULT ret;
+  ret = WHvCancelRunVirtualProcessor(u->parition, u->vp_index, 0);
   return 0;
 }
 uc_err uc_mem_map_ptr(uc_engine *uc, uint64_t address, size_t size, uint32_t perms, void *ptr) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-  struct kvm_userspace_memory_region memory = {
-    .memory_size = size,
-    .guest_phys_addr = address,
-    .userspace_addr = (uintptr_t)ptr,
-    .flags = (perms & UC_PROT_WRITE) ? 0 : KVM_MEM_READONLY, //FIXME: Look at perms?
-    .slot = u->mem_slots++,
-  };
+  uc_engine_whv* u = (uc_engine_whv*)uc;
 
   printf("Mapping guest 0x%08X - 0x%08X\n", address, address + size - 1);
-  
-  int r = ioctl(u->vm_fd, KVM_SET_USER_MEMORY_REGION, &memory);
-  if (r == -1) {
-    fprintf(stderr, "Error mapping memory: %m\n");
-    assert(false);
-    return -1;
+
+  WHV_MAP_GPA_RANGE_FLAGS flags = 0;
+  flags |= WHvMapGpaRangeFlagRead;
+  flags |= WHvMapGpaRangeFlagExecute;
+  if (perms & UC_PROT_WRITE) {
+    flags |= WHvMapGpaRangeFlagWrite;
   }
+
+  HRESULT ret;
+  ret = WHvMapGpaRange(u->partition, ptr, address, size, flags);
 
   return 0;
 }

@@ -2,9 +2,9 @@
 ; Licensed under GPLv2 or any later version
 ; Refer to the included LICENSE.txt file.
 
-; Build using: nasm uc_kvm_loader.asm -o build/uc_kvm_loader
-; Inspect using (16 bit): objdump -D -bbinary -mi8086 -Mintel --adjust-vma=0xFFFFF0000 build/uc_kvm_loader 
-; Inspect using (32 bit): objdump -D -bbinary -mi386 -Mintel --adjust-vma=0xFFFFF0000 build/uc_kvm_loader 
+; Build using: nasm uc_vm_loader.asm -o build/uc_vm_loader
+; Inspect using (16 bit): objdump -D -bbinary -mi8086 -Mintel --adjust-vma=0xFFFFF0000 build/uc_vm_loader 
+; Inspect using (32 bit): objdump -D -bbinary -mi386 -Mintel --adjust-vma=0xFFFFF0000 build/uc_vm_loader 
 
 org 0xFFFFF000
 
@@ -29,7 +29,7 @@ reload_cs:
   mov ds, eax
   mov es, eax
   mov ss, eax
-  out dx,ax
+  hlt
 
 align 16
 gdtr:
