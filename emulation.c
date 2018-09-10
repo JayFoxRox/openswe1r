@@ -402,7 +402,7 @@ void InitializeEmulation() {
     printf("Failed on uc_open() with error returned %u: %s\n", err, uc_strerror(err));
   }
 
-#ifndef UC_KVM
+#ifndef UC_VM
   // Add hooks to catch errors
   uc_hook errorHooks[6];
   {
@@ -426,7 +426,7 @@ void InitializeEmulation() {
   }
 #endif
 
-#ifndef UC_KVM
+#ifndef UC_VM
   // Setup segments
   SegmentDescriptor* gdtEntries = (SegmentDescriptor*)aligned_malloc(ucAlignment, AlignUp(gdtSize, ucAlignment));
   memset(gdtEntries, 0x00, gdtSize);
@@ -489,6 +489,9 @@ void InitializeEmulation() {
 }
 
 void SetTracing(bool enabled) {
+#ifdef UC_VM
+  assert(false);
+#else
   // Add a trace hook so we get proper EIP after running
   static uc_hook traceHook = -1;
   if (enabled) {
@@ -501,10 +504,13 @@ void SetTracing(bool enabled) {
       traceHook = -1;
     }
   }
+#endif
 }
 
 void SetProfiling(bool enabled) {
-
+#ifdef UC_VM
+  assert(false);
+#else
   // First, clear the old heatmap if it exists
   if (heat != NULL) {
     for(uint32_t page = 0; page < 0x10000; page++) {
@@ -540,6 +546,7 @@ void SetProfiling(bool enabled) {
       profilingHook = -1;
     }
   }
+#endif
 }
 
 unsigned int CreateEmulatedThread(uint32_t eip) {

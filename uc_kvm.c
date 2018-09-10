@@ -27,29 +27,15 @@
 #include <errno.h>
 #include <string.h>
 
-typedef struct _cbe {
-  struct _cbe* next;
-  unsigned int hook_index;
-  bool removed;
-  int type;
-  void *callback;
-  void *user_data;
-  uint64_t begin;
-  uint64_t end;
-  union {
-    int insn; // UC_HOOK_INSN
-  } extra;
-} cbe; // callback entry
+#include "uc_vm.h"
 
 typedef struct {
-  unsigned int hook_index;
   unsigned int mem_slots;
   pthread_t thread;
   int fd;
   int vm_fd;
   int vcpu_fd;
   struct kvm_run *run;
-  cbe* cb_head;
 } uc_engine_kvm;
 
 static int _kvm_print_cap(int fd, const char* title, unsigned int cap) {
@@ -68,47 +54,72 @@ static void nopSignalHandler() {
   // the execution of the guest.
 }
 
-static void printRegs(uc_engine_kvm* kvm) {
-  struct kvm_regs regs;
-  struct kvm_sregs sregs;
-  int r = ioctl(kvm->vcpu_fd, KVM_GET_REGS, &regs);
-  int s = ioctl(kvm->vcpu_fd, KVM_GET_SREGS, &sregs);
-  if (r == -1 || s == -1) {
-    fprintf(stderr, "Get Regs failed");
-    return;
-  }
-  printf("rax: 0x%08llx\n", regs.rax);
-  printf("rbx: 0x%08llx\n", regs.rbx);
-  printf("rcx: 0x%08llx\n", regs.rcx);
-  printf("rdx: 0x%08llx\n", regs.rdx);
-  printf("rsi: 0x%08llx\n", regs.rsi);
-  printf("rdi: 0x%08llx\n", regs.rdi);
-  printf("rsp: 0x%08llx\n", regs.rsp);
-  printf("rbp: 0x%08llx\n", regs.rbp);
-  printf("rip: 0x%08llx\n", regs.rip);
-  printf("rflags: 0x%08llx\n", regs.rflags);
-  printf("=====================\n");
-  printf("cr0: 0x%016llx\n", sregs.cr0);
-  printf("cr2: 0x%016llx\n", sregs.cr2);
-  printf("cr3: 0x%016llx\n", sregs.cr3);
-  printf("cr4: 0x%016llx\n", sregs.cr4);
-  printf("cr8: 0x%016llx\n", sregs.cr8);
-  printf("gdt: 0x%04x:0x%08llx\n", sregs.gdt.limit, sregs.gdt.base);
-  printf("cs: 0x%08llx ds: 0x%08llx es: 0x%08llx\nfs: 0x%08llx gs: 0x%08llx ss: 0x%08llx\n",
-       sregs.cs.base, sregs.ds.base, sregs.es.base, sregs.fs.base, sregs.gs.base, sregs.ss.base);
+/*
+struct kvm_segment {
+	__u64 base;
+	__u32 limit;
+	__u16 selector;
+	__u8  type;
+	__u8  present, dpl, db, s, l, g, avl;
+	__u8  unusable;
+	__u8  padding;
+};
+*/
+
+static void load_segment(struct kvm_segment* desc, uint16_t selector, uint64_t base, uint32_t limit, uint16_t ar) {
+
+  union {
+    struct {
+      uint32_t type:4;
+      uint32_t desc:1;
+      uint32_t dpl:2;
+      uint32_t present:1;
+      uint32_t:4;
+      uint32_t available:1;
+      uint32_t long_mode:1;
+      uint32_t operand_size:1;
+      uint32_t granularity:1;
+
+      uint32_t null:1;
+      uint32_t:15;
+    };
+    uint32_t ar;
+  } x;
+
+  x.ar = ar;
+
+  desc->selector = selector;
+  desc->base = base;
+  desc->limit = limit;
+  desc->type = x.type;
+  desc->present = x.present;
+  desc->dpl = x.dpl;
+  desc->db = x.operand_size;
+  desc->s = x.desc;
+  desc->l = x.long_mode;
+  desc->g = x.granularity;
+  desc->avl = x.available;
+
+	__u8  present, dpl, db, s, l, g, avl;
+	__u8  unusable;
+  return;
 }
 
+
+static void load_dtable(struct kvm_dtable* dtable, uint64_t base, uint16_t limit) {
+  dtable->base = base;
+  dtable->limit = limit;
+  return;
+}
 
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   uc_engine_kvm* u = malloc(sizeof(uc_engine_kvm));
   int r;
 
-  u->hook_index = 0;
   u->fd = -1;
-  u->vcpu_fd = -1;
   u->vm_fd = -1;
+  u->vcpu_fd = -1;
   u->run = NULL;
-  u->cb_head = NULL;
   u->mem_slots = 0;
   u->thread = pthread_self();
 
@@ -133,10 +144,13 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
   u->vm_fd = fd;
   
+  // Load a small bios which boots CPU into protected mode
+  size_t bios_size = 0x1000;
+  uint8_t* bios = memalign(0x100000, bios_size);
+
   // Give intel it's required space, I think these addresses are unused.
 #if 1
-  size_t bios_size = 0x1000;
-  uint64_t identity_base = 0xFFFFFFFF - bios_size - 0x4000 + 1; // Needs room for 5 pages
+  uint64_t identity_base = 0xFFFFFFFF - (bios_size + 0x4000) + 1; // Needs room for bios + 4 pages
   r = ioctl(u->vm_fd, KVM_SET_IDENTITY_MAP_ADDR, &identity_base); // 1 page
   if (r < 0) {
     fprintf(stderr, "Error assigning Identity Map space: %m\n");
@@ -185,30 +199,12 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
   u->run = (struct kvm_run*)map;
 
-
-  // Load a small bios which boots CPU into protected mode
-  uint8_t* bios = memalign(0x100000, bios_size);
-  FILE* f = fopen("uc_kvm_loader", "rb");
-  assert(f != NULL);
-  fread(bios, 1, bios_size, f);
-  fclose(f);
-  struct kvm_userspace_memory_region memory = {
-    .memory_size = bios_size,
-    .guest_phys_addr = 0xFFFFFFFF - bios_size + 1,
-    .userspace_addr = (uintptr_t)bios,
-    .flags = 0, //FIXME: Look at perms?
-    .slot = u->mem_slots++,
-  };
-  
-  r = ioctl(u->vm_fd, KVM_SET_USER_MEMORY_REGION, &memory);
-  if (r == -1) {
-    fprintf(stderr, "Error mapping memory: %m\n");
-    assert(false);
-    return -1;
-  }
+  // Map bios into address space
+  uc_mem_map_ptr(u, 0xFFFFFFFF - bios_size + 1, bios_size, UC_PROT_READ | UC_PROT_EXEC, bios);
 
   // Prepare CPU State
-   struct kvm_regs regs = { 0 };
+  struct kvm_regs regs = { 0 };
+  r = ioctl(u->vcpu_fd, KVM_GET_REGS, &regs);
 
   regs.rax = 0;
   regs.rbx = 0;
@@ -220,16 +216,37 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   regs.rbp = 0;
   // FIXME: regs.r8 - regs.r15 ?
 
-  regs.rflags = 2;
-  regs.rip = 0xFFF0;
-  r = ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);
+  //regs.rflags = 2;
+//  regs.rip = 0xFFF0;
 
+  struct kvm_sregs sregs = { 0 };
+  r = ioctl(u->vcpu_fd, KVM_GET_SREGS, &sregs);
+
+  sregs.cr0 |= 1; // Enable protected mode
+  load_dtable(&sregs.gdt, 0xFFFFF000, 0x18);
+  load_segment(&sregs.cs, 0x08, 0x00000000, 0xFFFFFFFF, 0xCF9B);
+  load_segment(&sregs.ds, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+  load_segment(&sregs.es, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+  load_segment(&sregs.ss, 0x10, 0x00000000, 0xFFFFFFFF, 0xCF93);
+
+  regs.rflags = 2;
+
+  // Hack to land us in a HLT
+  regs.rip = 0xFFFFFFF0;
+  memset(bios, 0xF4, bios_size);
+
+  r = ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);
+  r = ioctl(u->vcpu_fd, KVM_SET_SREGS, &sregs);
+
+
+#if 1
   // Run CPU until it is ready
   printRegs(u);
   ioctl(u->vcpu_fd, KVM_RUN, 0);
   printf("exit reason: %d\n", u->run->exit_reason);
   printRegs(u);
-  assert(u->run->exit_reason == KVM_EXIT_IO);
+  assert(u->run->exit_reason == KVM_EXIT_HLT);
+#endif
 
   // Enable signals
   sigset_t set;
@@ -243,76 +260,13 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   *uc = (uc_engine*)u;
   return 0;
 }
+
 uc_err uc_close(uc_engine *uc) {
   uc_engine_kvm* u = (uc_engine_kvm*)uc;
   assert(false);
   //FIXME: Close KVM and shit
   free(uc);
   return 0;
-}
-
-uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *user_data, uint64_t begin, uint64_t end, ...) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-
-  // Note that the original UC code also does an & comparison here..
-  //FIXME: This must scan all flags in proper order
-
-  cbe* cb = malloc(sizeof(cbe));
-  cb->removed = false;
-  cb->hook_index = u->hook_index++;
-  cb->type = type;
-  cb->callback = callback;
-  cb->user_data = user_data;
-  cb->begin = begin;
-  cb->end = end;
-
-  if (type & UC_HOOK_INSN) {
-    //FIXME: Assert UC_X86_INS_OUT or UC_X86_INS_IN
-
-    va_list valist;
-
-    va_start(valist, end);
-    int insn = va_arg(valist, int);
-    va_end(valist);
-
-    assert((insn == UC_X86_INS_IN) || (insn == UC_X86_INS_OUT));
-
-    cb->extra.insn = insn;
-  } else if (type & UC_HOOK_MEM_READ_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_READ_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_PROT) {
-    assert(false); //FIXME: This could be done
-  } else {
-    printf("Unsupported hook type: %d\n", type);
-    assert(false);
-  }
-
-  // Link hook into list
-  cb->next = u->cb_head;
-  u->cb_head = cb;
-
-  *hh = cb->hook_index;
-  return UC_ERR_OK;
-}
-uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-  cbe* cb = u->cb_head;
-  while(cb != NULL) {
-    if (cb->hook_index == hh) {
-      cb->removed = true;
-      break;
-    }
-    cb = cb->next;
-  }
-  return UC_ERR_OK;
 }
 
 uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
@@ -342,7 +296,7 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
 
   assert(u->vcpu_fd != -1);
 
-   struct kvm_regs regs;
+  struct kvm_regs regs;
   struct kvm_sregs sregs;
   int r = ioctl(u->vcpu_fd, KVM_GET_REGS, &regs);
   int s = ioctl(u->vcpu_fd, KVM_GET_SREGS, &sregs);
@@ -430,42 +384,44 @@ sregs.fs.limit = 0x1000;
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
   uc_engine_kvm* u = (uc_engine_kvm*)uc;
 
+  //FIXME: set EIP to `begin`
+
   int r;
   while (1) {
     ioctl(u->vcpu_fd, KVM_RUN, 0);
     switch(u->run->exit_reason) {
-      case KVM_EXIT_HLT:
-        return 0;
-      case KVM_EXIT_IO:
-        printRegs(u);
-        printf("Error accessing IO\n");
-        assert(false);
-        return -1;
-      case KVM_EXIT_MMIO:
-        printRegs(u);
-        printf("Error accessing 0x%08X\n", u->run->mmio.phys_addr);
-        assert(false);
-        return -2;
-      case KVM_EXIT_INTR:
-        printRegs(u);
-        printf("Interrupt\n");
-        assert(false);
-        return -3;
-      case KVM_EXIT_SHUTDOWN:
-        printRegs(u);
-        printf("Triple fault\n");
-        assert(false);
-        return -4;
-      case KVM_EXIT_FAIL_ENTRY:
-        printRegs(u);
-        printf("Failed to enter emulation: %llx\n", u->run->fail_entry.hardware_entry_failure_reason);
-        assert(false);
-        return -5;
-      default:
-        printRegs(u);
-        printf("unhandled exit reason: %i\n", u->run->exit_reason);
-        assert(false);
-        return -6;
+    case KVM_EXIT_HLT:
+      return 0;
+    case KVM_EXIT_IO:
+      printRegs(u);
+      printf("Error accessing IO\n");
+      assert(false);
+      return -1;
+    case KVM_EXIT_MMIO:
+      printRegs(u);
+      printf("Error accessing 0x%08X\n", u->run->mmio.phys_addr);
+      assert(false);
+      return -2;
+    case KVM_EXIT_INTR:
+      printRegs(u);
+      printf("Interrupt\n");
+      assert(false);
+      return -3;
+    case KVM_EXIT_SHUTDOWN:
+      printRegs(u);
+      printf("Triple fault\n");
+      assert(false);
+      return -4;
+    case KVM_EXIT_FAIL_ENTRY:
+      printRegs(u);
+      printf("Failed to enter emulation: %llx\n", u->run->fail_entry.hardware_entry_failure_reason);
+      assert(false);
+      return -5;
+    default:
+      printRegs(u);
+      printf("unhandled exit reason: %i\n", u->run->exit_reason);
+      assert(false);
+      return -6;
     }
   }
 }
