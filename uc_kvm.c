@@ -27,29 +27,13 @@
 #include <errno.h>
 #include <string.h>
 
-typedef struct _cbe {
-  struct _cbe* next;
-  unsigned int hook_index;
-  bool removed;
-  int type;
-  void *callback;
-  void *user_data;
-  uint64_t begin;
-  uint64_t end;
-  union {
-    int insn; // UC_HOOK_INSN
-  } extra;
-} cbe; // callback entry
-
 typedef struct {
-  unsigned int hook_index;
   unsigned int mem_slots;
   pthread_t thread;
   int fd;
   int vm_fd;
   int vcpu_fd;
   struct kvm_run *run;
-  cbe* cb_head;
 } uc_engine_kvm;
 
 static int _kvm_print_cap(int fd, const char* title, unsigned int cap) {
@@ -103,12 +87,10 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   uc_engine_kvm* u = malloc(sizeof(uc_engine_kvm));
   int r;
 
-  u->hook_index = 0;
   u->fd = -1;
   u->vcpu_fd = -1;
   u->vm_fd = -1;
   u->run = NULL;
-  u->cb_head = NULL;
   u->mem_slots = 0;
   u->thread = pthread_self();
 
@@ -136,7 +118,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   // Give intel it's required space, I think these addresses are unused.
 #if 1
   size_t bios_size = 0x1000;
-  uint64_t identity_base = 0xFFFFFFFF - bios_size - 0x4000 + 1; // Needs room for 5 pages
+  uint64_t identity_base = 0xFFFFFFFF - (bios_size + 0x4000) + 1; // Needs room for bios + 4 pages
   r = ioctl(u->vm_fd, KVM_SET_IDENTITY_MAP_ADDR, &identity_base); // 1 page
   if (r < 0) {
     fprintf(stderr, "Error assigning Identity Map space: %m\n");
@@ -188,27 +170,15 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
 
   // Load a small bios which boots CPU into protected mode
   uint8_t* bios = memalign(0x100000, bios_size);
-  FILE* f = fopen("uc_kvm_loader", "rb");
+  FILE* f = fopen("uc_vm_loader", "rb");
   assert(f != NULL);
   fread(bios, 1, bios_size, f);
   fclose(f);
-  struct kvm_userspace_memory_region memory = {
-    .memory_size = bios_size,
-    .guest_phys_addr = 0xFFFFFFFF - bios_size + 1,
-    .userspace_addr = (uintptr_t)bios,
-    .flags = 0, //FIXME: Look at perms?
-    .slot = u->mem_slots++,
-  };
-  
-  r = ioctl(u->vm_fd, KVM_SET_USER_MEMORY_REGION, &memory);
-  if (r == -1) {
-    fprintf(stderr, "Error mapping memory: %m\n");
-    assert(false);
-    return -1;
-  }
+
+  uc_mem_map_ptr(uc, 0xFFFFFFFF - bios_size + 1, bios_size, UC_PROT_READ | UC_PROT_EXEC, bios);
 
   // Prepare CPU State
-   struct kvm_regs regs = { 0 };
+  struct kvm_regs regs = { 0 };
 
   regs.rax = 0;
   regs.rbx = 0;
@@ -229,7 +199,7 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   ioctl(u->vcpu_fd, KVM_RUN, 0);
   printf("exit reason: %d\n", u->run->exit_reason);
   printRegs(u);
-  assert(u->run->exit_reason == KVM_EXIT_IO);
+  assert(u->run->exit_reason == KVM_EXIT_HLT);
 
   // Enable signals
   sigset_t set;
@@ -249,70 +219,6 @@ uc_err uc_close(uc_engine *uc) {
   //FIXME: Close KVM and shit
   free(uc);
   return 0;
-}
-
-uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *user_data, uint64_t begin, uint64_t end, ...) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-
-  // Note that the original UC code also does an & comparison here..
-  //FIXME: This must scan all flags in proper order
-
-  cbe* cb = malloc(sizeof(cbe));
-  cb->removed = false;
-  cb->hook_index = u->hook_index++;
-  cb->type = type;
-  cb->callback = callback;
-  cb->user_data = user_data;
-  cb->begin = begin;
-  cb->end = end;
-
-  if (type & UC_HOOK_INSN) {
-    //FIXME: Assert UC_X86_INS_OUT or UC_X86_INS_IN
-
-    va_list valist;
-
-    va_start(valist, end);
-    int insn = va_arg(valist, int);
-    va_end(valist);
-
-    assert((insn == UC_X86_INS_IN) || (insn == UC_X86_INS_OUT));
-
-    cb->extra.insn = insn;
-  } else if (type & UC_HOOK_MEM_READ_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_UNMAPPED) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_READ_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_WRITE_PROT) {
-    assert(false); //FIXME: This could be done
-  } else if (type & UC_HOOK_MEM_FETCH_PROT) {
-    assert(false); //FIXME: This could be done
-  } else {
-    printf("Unsupported hook type: %d\n", type);
-    assert(false);
-  }
-
-  // Link hook into list
-  cb->next = u->cb_head;
-  u->cb_head = cb;
-
-  *hh = cb->hook_index;
-  return UC_ERR_OK;
-}
-uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-  cbe* cb = u->cb_head;
-  while(cb != NULL) {
-    if (cb->hook_index == hh) {
-      cb->removed = true;
-      break;
-    }
-    cb = cb->next;
-  }
-  return UC_ERR_OK;
 }
 
 uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
@@ -342,7 +248,7 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
 
   assert(u->vcpu_fd != -1);
 
-   struct kvm_regs regs;
+  struct kvm_regs regs;
   struct kvm_sregs sregs;
   int r = ioctl(u->vcpu_fd, KVM_GET_REGS, &regs);
   int s = ioctl(u->vcpu_fd, KVM_GET_SREGS, &sregs);
@@ -429,6 +335,8 @@ sregs.fs.limit = 0x1000;
 }
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
   uc_engine_kvm* u = (uc_engine_kvm*)uc;
+
+  //FIXME: set EIP to `begin`
 
   int r;
   while (1) {
