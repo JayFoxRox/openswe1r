@@ -277,7 +277,13 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   //FIXME: Permissions!
   uc_err err;
   assert(size % ucAlignment == 0);
+#ifdef UC_NATIVE
+  //FIXME: Respect protection
+  void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
+  assert(memory == address);
+#else
   void* memory = aligned_malloc(ucAlignment, size);
+#endif
   memset(memory, 0x00, size);
   err = uc_mem_map_ptr(uc, address, size, UC_PROT_ALL, memory);
   if (err) {
