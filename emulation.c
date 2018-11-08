@@ -19,6 +19,10 @@
 #include "emulation.h"
 #include "exe.h"
 
+#ifdef UC_NATIVE
+#include <sys/mman.h>
+#endif
+
 //FIXME: These are hacks (register when mapping instead!)!
 extern Exe* exe;
 uint8_t* stack = NULL;
@@ -341,12 +345,73 @@ void* Memory(uint32_t address) {
   return NULL;
 }
 
+#ifdef UC_NATIVE
+#include "uc_native.h"
+#include <setjmp.h>
+
+extern jmp_buf* host_jmp;
+extern uint32_t guest_registers_esp;
+extern Registers* guest_registers;
+extern uint32_t host_esp;
+static uint32_t host_eip;
+
+static __attribute__((__stdcall)) void return_to_host() {
+  guest_registers->esp = guest_registers_esp;
+  guest_registers->eip = host_eip;
+  printf("yay 0x%08X\n", guest_registers->eip);
+#if 0
+  asm("mov $0, %%ax\n"
+      "mov %%ax, %%fs\n":);
+#endif
+  longjmp(*host_jmp, 1);
+}
+#endif
+
 Address CreateHlt() {
+#ifdef UC_NATIVE
+
+  extern void(__attribute__((__stdcall)) __return_to_host)();
+  asm("jmp continue\n"
+      ".global __return_to_host\n"
+      "__return_to_host:\n"
+
+      // Keep a backup of the real guest ESP
+      "mov %%esp, guest_registers_esp\n"
+
+      // Fill guest_registers
+      "mov guest_registers, %%esp\n"
+      "add $32, %%esp\n"
+      "pusha\n"
+
+      // Move to host space
+      "mov host_esp, %%esp\n"
+      "popa\n"
+
+      "call return_to_host\n"
+      "continue:\n":);
+
+  Address code_address = Allocate(20);
+  uint8_t* code = Memory(code_address);
+  *code++ = 0x90; // Marker
+
+  *code++ = 0xc7; // mov code_address, [guest_eip]
+  *code++ = 0x05;
+  *(uint32_t*)code = (uintptr_t)&host_eip;
+  code += 4;
+  *(uint32_t*)code = code_address + 1;
+  code += 4;
+
+  *code++ = 0xE9; // jmp __return_to_host
+  *(uint32_t*)code = (uintptr_t)__return_to_host - (uintptr_t)code - 4;
+  code += 4;
+#else
   Address code_address = Allocate(2);
   uint8_t* code = Memory(code_address);
+  *code++ = 0x90; // Marker
   *code++ = 0xF4; // HLT
   //FIXME: Are changes to regs even registered here?!
   *code++ = 0xC3; // End block with RET
+#endif
   return code_address;
 }
 
@@ -629,7 +694,7 @@ void RunEmulation() {
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
 
       Address hltAddress = ctx->eip - 1;
-      assert(*(uint8_t*)Memory(hltAddress) == 0xF4);
+      assert(*(uint8_t*)Memory(hltAddress) == 0x90);
 
       HltHandler* hltHandler = findHltHandler(hltAddress);
       if(hltHandler != NULL) {

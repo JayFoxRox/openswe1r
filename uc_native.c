@@ -6,12 +6,23 @@
 
 #include <stdlib.h>
 #include <assert.h>
-
+#include <setjmp.h>
 #include <inttypes.h>
+#include <sys/types.h>
+#include <asm/ldt.h>
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <string.h>
 
+#include <linux/unistd.h>
+#include <asm/ldt.h>
+
+#include "uc_native.h"
 
 typedef struct {
-  int pad;
+  jmp_buf jmp;
+  Registers registers;
 } uc_engine_native;
 
 uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *user_data, uint64_t begin, uint64_t end, ...) {
@@ -21,6 +32,19 @@ uc_err uc_hook_add(uc_engine *uc, uc_hook *hh, int type, void *callback, void *u
 uc_err uc_hook_del(uc_engine *uc, uc_hook hh) {
   assert(false);
 }
+
+
+#if 0
+static void sigsegv_handler(int sig, siginfo_t *si, void *arg) {
+    printf("Got SIGSEGV at address: 0x%lx\n",(long) si->si_addr);
+    printf("Implements the handler only\n");
+    flag=1;
+
+    ucontext *u = (ucontext *)arg;
+    unsigned char *pc = (unsigned char *)u->uc_mcontext.gregs[REG_RIP];
+
+}
+#endif
 
 uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   uc_engine_native* u = malloc(sizeof(uc_engine_native));
@@ -38,7 +62,6 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
 #endif
 
 #if 0
-  uc_engine_kvm* u = malloc(sizeof(uc_engine_kvm));
   int r;
 
   u->hook_index = 0;
@@ -162,10 +185,10 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   if (r != 0) {
     fprintf(stderr, "pthread_sigmask %m\n");
   }
+#endif
 
   *uc = (uc_engine*)u;
   return 0;
-#endif
 }
 uc_err uc_close(uc_engine *uc) {
   assert(false);
@@ -174,53 +197,45 @@ uc_err uc_close(uc_engine *uc) {
 
 
 uc_err uc_reg_read(uc_engine *uc, int regid, void *value) {
-#if 0
-  uc_engine_kvm* u = (uc_engine_kvm*)uc;
-
-  assert(u->vcpu_fd != -1);
-
-  struct kvm_regs regs;
-  struct kvm_sregs sregs;
-  int r = ioctl(u->vcpu_fd, KVM_GET_REGS, &regs);
-  int s = ioctl(u->vcpu_fd, KVM_GET_SREGS, &sregs);
+  uc_engine_native* u = (uc_engine_native*)uc;
 
   if (regid == UC_X86_REG_EIP) {
-    *(int*)value = regs.rip;
+    *(int*)value = u->registers.eip;
   } else if (regid == UC_X86_REG_ESP) {
-    *(int*)value = regs.rsp;
+    *(int*)value = u->registers.esp;
   } else if (regid == UC_X86_REG_EAX) {
-    *(int*)value = regs.rax;
+    *(int*)value = u->registers.eax;
   } else {
 //    assert(false);
   }
 
   return 0;
-#endif
 }
 uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
-#if 0
+  uc_engine_native* u = (uc_engine_native*)uc;
+
   if (regid == UC_X86_REG_GDTR) {
-    const uc_x86_mmr* gdtr = value;
+    //const uc_x86_mmr* gdtr = value;
     //sregs.gdt.base = gdtr->base;
     //sregs.gdt.limit = gdtr->limit;
   } else if (regid == UC_X86_REG_EIP) {
-    regs.rip = *(int*)value;
+    u->registers.eip = *(int*)value;
   } else if (regid == UC_X86_REG_ESP) {
-    regs.rsp = *(unsigned int*)value;
+    u->registers.esp = *(unsigned int*)value;
   } else if (regid == UC_X86_REG_EBP) {
-    regs.rbp = *(int*)value;
+    u->registers.ebp = *(int*)value;
   } else if (regid == UC_X86_REG_ESI) {
-    regs.rsi = *(int*)value;
+    u->registers.esi = *(int*)value;
   } else if (regid == UC_X86_REG_EDI) {
-    regs.rdi = *(int*)value;
+    u->registers.edi = *(int*)value;
   } else if (regid == UC_X86_REG_EAX) {
-    regs.rax = *(int*)value;
+    u->registers.eax = *(int*)value;
   } else if (regid == UC_X86_REG_EBX) {
-    regs.rbx = *(int*)value;
+    u->registers.ebx = *(int*)value;
   } else if (regid == UC_X86_REG_ECX) {
-    regs.rcx = *(int*)value;
+    u->registers.ecx = *(int*)value;
   } else if (regid == UC_X86_REG_EDX) {
-    regs.rdx = *(int*)value;
+    u->registers.edx = *(int*)value;
   } else if (regid == UC_X86_REG_EFLAGS) {
     //regs.rflags = *(int*)value;
   } else if (regid == UC_X86_REG_FPSW) {
@@ -271,16 +286,97 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
     assert(false);
   }
 
-sregs.fs.base = 0xB0000000;
-sregs.fs.limit = 0x1000;
-
-  ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);
-  ioctl(u->vcpu_fd, KVM_SET_SREGS, &sregs);
-#endif
   return 0;
 }
+
+// Accessed via inline assembly
+static uint32_t _begin;
+Registers* guest_registers;
+uint32_t guest_registers_esp;
+uint32_t host_esp;
+jmp_buf* host_jmp;
+
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
+  uc_engine_native* u = (uc_engine_native*)uc;
   printf("uc_emu_start\n");
+
+  host_jmp = &u->jmp;
+
+  if (setjmp(*host_jmp) == 0) {
+
+    printf("Doing some bullshit\n");
+
+    _begin = begin;
+
+    static struct user_desc ldt_desc;
+  
+
+    static uint8_t* tls = NULL;
+    if (tls == NULL) {
+      tls = malloc(0x1000);
+      memset(tls, 0xBB, 0x1000);
+      u->registers.fs_base = tls;
+
+  #if 0
+      ldt_desc.entry_number = 0x63 >> 3;
+      int ret2 = syscall(SYS_get_thread_area, &ldt_desc);
+      printf("%d\n", ldt_desc.limit);
+      printf("0x%X\n", ldt_desc.contents);
+  #endif
+
+      ldt_desc.entry_number = -1;
+      ldt_desc.base_addr = u->registers.fs_base;
+      ldt_desc.limit = 0xFFF;
+      ldt_desc.seg_32bit = 1;
+      ldt_desc.contents = 0x0;
+      ldt_desc.read_exec_only = 0;
+      ldt_desc.limit_in_pages = 0;
+      ldt_desc.seg_not_present = 0;
+      ldt_desc.useable = 1;
+
+      int ret = syscall(SYS_set_thread_area, &ldt_desc);
+      printf("%d: Got seg %d\n", ret, ldt_desc.entry_number);
+  }
+
+  // Set FS to use our new thread area
+  uint16_t seg = ldt_desc.entry_number;
+  asm("mov %[seg], %%ax\n"
+      "shl $3, %%ax\n"
+      "or $0x3, %%ax\n"
+      "movw %%ax, %%fs\n"::[seg]"r"(seg));
+
+
+#if 0
+    uint32_t foo = 0;
+    asm("mov %%fs:0, %[foo]\n" : [foo]"=r"(foo)); // : [fs]"r"(fs));
+    printf("Read 0x%X\n", foo);
+#endif
+
+    guest_registers = &u->registers;
+    guest_registers_esp = guest_registers->esp;
+
+    asm volatile(// "int3\n"
+                 //"movl fs, 32([registers])"
+
+                 // Make host backup
+                 "pusha\n"
+                 "mov %%esp, host_esp\n"
+
+                 // Load all registers
+                 "mov guest_registers, %%esp\n"
+                 "popa\n"
+                 "mov guest_registers_esp, %%esp\n"
+                 //FIXME: Fixup ESP too
+
+                 "jmp *_begin\n":);
+
+    // This can never return, or setjmp / longjmp would break!
+    assert(false);
+
+  } else {
+    printf("Returned\n");
+  }
+
   return 0;
 }
 uc_err uc_emu_stop(uc_engine *uc) {

@@ -106,6 +106,8 @@ target_sources(openswe1r PUBLIC
   uc_native.c
   xbox.c
 )
+target_compile_definitions(openswe1r PUBLIC -DUC_NATIVE)
+
 
 if(MSVC)
   # Silence MSVC CRT security warnings
