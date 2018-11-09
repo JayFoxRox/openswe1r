@@ -31,11 +31,12 @@ static uint32_t tlsAddress = 0xB0000000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0xC0000000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 16 * 1024 * 1024; // 4 MiB stack should be PLENTY
+static uint32_t stackSize = 1 * 1024 * 1024; // 4 MiB stack should be PLENTY
 
-#define HEAP_ADDRESS 0x0D000000
+#define HEAP_ADDRESS 0x02000000
+//                   0x1FBEFCFE
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
+static uint32_t heapSize = 100 * 1024 * 1024; // 1024 MiB
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
