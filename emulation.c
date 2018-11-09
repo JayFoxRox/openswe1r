@@ -31,7 +31,7 @@ static uint32_t tlsAddress = 0xB0000000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0xC0000000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 1 * 1024 * 1024; // 4 MiB stack should be PLENTY
+static uint32_t stackSize = 512 * 1024; // 4 MiB stack should be PLENTY
 
 #define HEAP_ADDRESS 0x02000000
 //                   0x1FBEFCFE
@@ -296,6 +296,8 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
 
 static int allocId = 0;
 static int freeId = 0;
+static int freeCount = 0;
+static int allocCount = 0;
 
 
 Address Allocate(Size size) {
@@ -310,11 +312,8 @@ Address Allocate(Size size) {
   uint32_t ret = address;
   address += size;
 
-  //FIXME: Proper allocator
-
-
   int use = address - HEAP_ADDRESS;
-  printf("Heap-use: %u / %u = %u%% [%d alloc / %d free = %d]\n", use, heapSize, use / (heapSize / 100), allocId, freeId, allocId - freeId);
+  printf("Heap-use: %u / %u = %u%% [%d alloc / %d free = %d]; %d bytes free'd\n", use, heapSize, use / (heapSize / 100), allocId, freeId, allocId - freeId, freeCount);
   assert(use <= heapSize);
 
   allocId++;
@@ -342,6 +341,7 @@ void Free(Address address) {
   // Debug memset to detect memory errors
   memset(allocation->data, 0x55, allocation->size);
 
+  freeCount += allocation->size;
   freeId++;
 }
 
@@ -585,7 +585,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId++; // 256 kiB per late thread
+  uint32_t esp = stackAddress + stackSize; // 256 kiB per late thread
   assert(threadId < 4);
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
@@ -666,6 +666,11 @@ void RunEmulation() {
 
       //Hack: Manually transfers EIP (might have been changed in callback)
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
+
+      uc_reg_read(uc, UC_X86_REG_ESP, &ctx->esp);
+
+      int away = stackSize - (ctx->esp - stackAddress);
+      printf("Stack-use: %d / %d = %d\n", away, stackSize, away / (stackSize / 100));
     }
 
     // threads array might be relocated if a thread was modified in a callback; update ctx pointer
