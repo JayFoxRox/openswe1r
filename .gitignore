@@ -1,1 +1,9 @@
 build/
+
+# nxdk garbage
+bin/
+*.obj
+*.d
+*.iso
+*.exe
+*.lib

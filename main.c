@@ -3,7 +3,11 @@
 // Refer to the included LICENSE.txt file.
 
 #include "main.h"
+#ifndef XBOX
 #include "app_version.h"
+#else
+#define APP_VERSION_STRING "<APP_VERSION_STRING>"
+#endif
 
 #include <string.h>
 #include <stdio.h>
@@ -18,8 +22,14 @@
 #include "emulation.h"
 #include "exe.h"
 
+#ifndef XBOX
 //FIXME: Alternative for non-posix OS!
 #include <time.h>
+#endif
+
+#ifdef XBOX
+#include "xbox.h"
+#endif
 
 
 #include "SDL.h"
@@ -47,6 +57,7 @@ void AddExport(const char* name, void* callback, Address address) {
   Export* export = &exports[exportCount];
   export->name = malloc(strlen(name) + 1);
   strcpy((char*)export->name, name);
+  printf("    Stored '%s' at %p\n", export->name, export->name);
   export->callback = callback;
   export->address = 0;
   exportCount++;
@@ -89,7 +100,7 @@ uint32_t tls[1000] = {0};
 
 #include "windows.h" // Hack while exports are not ready
 // HACK:
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 static void UnknownImport(void* uc, Address address, void* user_data);
 Address CreateInterface(const char* name, unsigned int slotCount) {
@@ -1000,11 +1011,22 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   hacky_printf("ppv 0x%" PRIX32 "\n", stack[5]);
   const API(CLSID)* clsid = (const API(CLSID)*)Memory(stack[1]);
   char clsidString[1024];
+  hacky_printf("pre sprintf\n");
   sprintf(clsidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
           clsid->Data1, clsid->Data2, clsid->Data3,
           clsid->Data4[0], clsid->Data4[1], clsid->Data4[2], clsid->Data4[3],
           clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7]);
+clsidString[50] = '\0';
+
+hacky_printf("post sprintf / pre printf\n");
+hacky_printf("<<< (%d bytes)\n", strlen(clsidString));
+hacky_printf(clsidString);
+hacky_printf("\n---\n");
+hacky_printf("  (read clsid: {%s})\n", clsidString);
+hacky_printf(">>>\n");
+
   printf("  (read clsid: {%s})\n", clsidString);
+hacky_printf("post printf\n");
   const API(IID)* iid = (const API(IID)*)Memory(stack[4]);
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
@@ -3882,7 +3904,7 @@ Exe* LoadExe(const char* path) {
           sprintf(label, "<%s@%d>", name, ordinal);
         } else {
           API(IMAGE_IMPORT_BY_NAME)* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
-          printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
+          printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' (%p) ..", thunkAddress, importByName->hint, importByName->name, importByName->name);
           label = strdup(importByName->name);
         }
 
@@ -3986,7 +4008,9 @@ void RunX86(Exe* exe) {
       printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
       void* relocatedMappedSection = MapMemory(base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
       memcpy(relocatedMappedSection, *mappedSection, section->virtualSize);
-      aligned_free(*mappedSection);
+      //FIXME: Can't free this :(
+      //       This is used by some of the code [export->name most importantly]
+      //aligned_free(*mappedSection);
       *mappedSection = relocatedMappedSection;
     }
   }
@@ -3999,7 +4023,47 @@ void RunX86(Exe* exe) {
   CleanupEmulation();
 }
 
+#ifdef XBOX
+// Stolen from https://gist.github.com/mmozeiko/ae38aeb10add7cb66be4c00f24f8e688
+
+// C initializers
+__attribute__((section(".CRT$XCA"))) _PVFV __xc_a[] = { 0 };
+__attribute__((section(".CRT$XCZ"))) _PVFV __xc_z[] = { 0 };
+
+static void win32_crt_call(_PVFV* a, _PVFV* b) {
+  while (a != b) {
+    if (*a) {
+      (**a)();
+    }
+    a++;
+  }
+}
+#endif
+
 int main(int argc, char* argv[]) {
+#ifdef XBOX
+
+  // Reserve the space for the EXE
+  void* memory = 0x00400000;
+  SIZE_T allocated_size = 0x00C00000;
+  NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_RESERVE, PAGE_READWRITE);
+
+  pb_init();
+
+  pb_show_debug_screen();
+
+  // Clear log
+  FILE* f = fopen("log.txt", "wb");
+  fclose(f);
+#endif
+
+
+#ifdef XBOX
+  printf("-- Running CRT functions ()\n");
+  win32_crt_call(__xc_a, __xc_z);
+#endif
+
+
   printf("-- Initializing\n");
   printf("Version: %s\n", APP_VERSION_STRING);
   InitializeEmulation();
@@ -4126,7 +4190,6 @@ int main(int argc, char* argv[]) {
 #endif
 
 //memset(Memory(0x423cd9), 0x90, 5); // Disable command line arg scanning
-
 
   printf("-- Switching mode\n");
   RunX86(exe);

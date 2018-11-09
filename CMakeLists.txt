@@ -21,6 +21,8 @@ if(ENET_FOUND)
   )
 endif()
 
+message(${LIBUNICORN_INCLUDE_DIR})
+
 include_directories(SYSTEM
   ${LIBUNICORN_INCLUDE_DIR}
   ${OPENGL_INCLUDE_DIR}

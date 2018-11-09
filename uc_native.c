@@ -2,21 +2,24 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 #include <stdlib.h>
 #include <assert.h>
 #include <setjmp.h>
 #include <inttypes.h>
+
+#ifdef XBOX
+#else
+#define _GNU_SOURCE
 #include <sys/types.h>
 #include <asm/ldt.h>
-#define _GNU_SOURCE
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <string.h>
-
 #include <linux/unistd.h>
 #include <asm/ldt.h>
+#endif
 
 #include "uc_native.h"
 
@@ -308,6 +311,8 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
 
     _begin = begin;
 
+#ifdef XBOX
+#else
     static struct user_desc ldt_desc;
   
 
@@ -344,7 +349,7 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
       "shl $3, %%ax\n"
       "or $0x3, %%ax\n"
       "movw %%ax, %%fs\n"::[seg]"r"(seg));
-
+#endif
 
 #if 0
     uint32_t foo = 0;
@@ -360,15 +365,15 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
 
                  // Make host backup
                  "pusha\n"
-                 "mov %%esp, host_esp\n"
+                 "mov %%esp, _host_esp\n"
 
                  // Load all registers
-                 "mov guest_registers, %%esp\n"
+                 "mov _guest_registers, %%esp\n"
                  "popa\n"
-                 "mov guest_registers_esp, %%esp\n"
+                 "mov _guest_registers_esp, %%esp\n"
                  //FIXME: Fixup ESP too
 
-                 "jmp *_begin\n":);
+                 "jmp *__begin\n":);
 
     // This can never return, or setjmp / longjmp would break!
     assert(false);
@@ -383,7 +388,7 @@ uc_err uc_emu_stop(uc_engine *uc) {
   assert(false);
 }
 uc_err uc_mem_map_ptr(uc_engine *uc, uint64_t address, size_t size, uint32_t perms, void *ptr) {
-  printf("Mapping guest 0x%08" PRIX64 " - 0x%08" PRIX64 " to %p\n", address, address + size - 1, ptr);
+  printf("Mapping guest %p - %p to %p\n", (uintptr_t)address, (uintptr_t)(address + size - 1), ptr);
   
   assert(address == ptr);
 

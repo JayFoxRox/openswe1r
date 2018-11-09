@@ -6,11 +6,24 @@
 
 #include <stdio.h>
 
-#define GLEW_STATIC
 #include <GL/glew.h>
 
 #include <assert.h>
 #include <stdbool.h>
+
+#include <stdint.h>
+#include <stdlib.h>
+
+
+#include "xbox.h"
+
+
+
+
+// unistd.. thanks SDL
+void _exit(int status) {
+  exit(status);
+}
 
 
 
@@ -83,8 +96,15 @@ int alSourceStop(int a0) {
 
 
 
+static void* element_array_buffer = NULL;
+static void* array_buffer = NULL;
 
-#define GLAPI
+extern float clipScale[];
+extern float clipOffset[];
+
+uint8_t buffer[640*480] = {0};
+
+#define GLAPI // __stdcall
 
 
 GLAPI void GLAPIENTRY glBindTexture (GLenum target, GLuint texture) {
@@ -109,6 +129,8 @@ GLAPI void GLAPIENTRY glClearDepth (GLclampd depth) {
 
 GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
   printf("%s\n", __func__);
+  //FIXME: Clear color?!
+  memset(buffer, 0x00, sizeof(buffer));
   return;
 }
 
@@ -137,13 +159,102 @@ GLAPI void GLAPIENTRY glDisable (GLenum cap) {
   return;
 }
 
+static void saveBuffer() {
+
+  static int t = 0;
+  if (t++ < 60) {
+    return;
+  }
+  t = 0;
+
+  FILE* f = fopen("fb.ppm", "wb");
+  fprintf(f, "P3\n"
+             "640 480\n"
+             "255\n");
+  for(int y = 0; y < 480; y++) {
+    for(int x = 0; x < 640; x++) {
+      uint8_t r = buffer[y * 640 + x];
+      uint8_t g = buffer[y * 640 + x];
+      uint8_t b = buffer[y * 640 + x];
+      fprintf(f, "%d %d %d  ", r,g,b);
+    }
+    fprintf(f, "\n");
+  }
+  fclose(f);
+}
+
+static void drawVertex(int i) {
+
+  GLsizei stride = 4 * 4 + 4 + 4 + 1 * 8;
+
+  struct Vertex {
+    float x;
+    float y;
+    float z;
+    float w;
+    float unk0;    
+    float unk1;
+    float u;
+    float v;
+  };
+  assert(sizeof(struct Vertex) == stride);
+
+  struct Vertex* vertices = array_buffer;
+  struct Vertex* v = &vertices[i];
+/*  
+"  gl_Position = vec4(positionIn.xyz * clipScale + clipOffset, 1.0);\n"
+*/
+  float fx = v->x * clipScale[0] + clipOffset[0];
+  float fy = v->y * clipScale[1] + clipOffset[1];
+  float fz = v->z * clipScale[2] + clipOffset[2];
+  float fw = 1.0f;
+
+
+  // "  gl_Position /= positionIn.w;\n"
+  fx /= fw;
+  fy /= fw;
+  fz /= fw;
+  fw /= fw;
+
+  //"  gl_Position.y = -gl_Position.y;\n"
+  fy = -fy;
+
+
+  int x = fx * 320 + 320;
+  int y = -fy * 240 + 240;
+  int z = fz * 0xFF;
+
+  // Clip
+  if ((x < 0) || (x >= 640)) { return; }
+  if ((y < 0) || (y >= 480)) { return; }
+  
+  //FIXME: fz is typically -1.0?!
+  //if ((z < 0) || (z > 0xFF)) { return; }
+  z = 0xFF;  
+
+  buffer[y * 640 + x] = 0x80 + z / 2;
+
+}
+
 GLAPI void GLAPIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
   printf("%s\n", __func__);
+
+  for(unsigned int i = 0; i < count; i++) {
+    drawVertex(first + i);
+  }
+
   return;
 }
 
 GLAPI void GLAPIENTRY glDrawElements (GLenum mode, GLsizei count, GLenum type, const void *indices) {
   printf("%s\n", __func__);
+
+  assert(type == GL_UNSIGNED_SHORT);
+  uint16_t* i16 = (uint16_t*)((uintptr_t)element_array_buffer + (uintptr_t)indices);
+  for(unsigned int i = 0; i < count; i++) {
+    drawVertex(i16[i]);
+  }
+
   return;
 }
 
@@ -177,19 +288,19 @@ GLAPI void GLAPIENTRY glTexImage2D (GLenum target, GLint level, GLint internalfo
 
   switch(type) {
   case GL_UNSIGNED_BYTE: {
-    FILE* f = fopen("/tmp/rgba8888.bin", "wb");
+    FILE* f = fopen("rgba8888.bin", "wb");
     fwrite(pixels, width * height * 4, 1, f);
     fclose(f);
     break;
   }
   case GL_UNSIGNED_SHORT_1_5_5_5_REV: {
-    FILE* f = fopen("/tmp/rgba5551.bin", "wb");
+    FILE* f = fopen("rgba5551.bin", "wb");
     fwrite(pixels, width * height * 2, 1, f);
     fclose(f);
     break;
   }
   case GL_UNSIGNED_SHORT_4_4_4_4_REV: {
-    FILE* f = fopen("/tmp/rgba4444.bin", "wb");
+    FILE* f = fopen("rgba4444.bin", "wb");
     fwrite(pixels, width * height * 2, 1, f);
     fclose(f);
     break;
@@ -198,6 +309,9 @@ GLAPI void GLAPIENTRY glTexImage2D (GLenum target, GLint level, GLint internalfo
     assert(false);
     break;
   }
+
+  printf("%s done\n", __func__);
+
   return;
 }
 
@@ -239,6 +353,15 @@ void GLAPIENTRY _glBindVertexArray(int a0) {
 
 void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
   printf("%s\n", __func__);
+  if (target == GL_ELEMENT_ARRAY_BUFFER) {
+    element_array_buffer = realloc(element_array_buffer, size);
+    memcpy(element_array_buffer, data, size);
+  } else if (target == GL_ARRAY_BUFFER) {
+    array_buffer = realloc(array_buffer, size);
+    memcpy(array_buffer, data, size);
+  } else {
+    assert(false);
+  }
   return;
 }
 
@@ -313,9 +436,9 @@ GLAPI void GLAPIENTRY _glGetShaderiv(int a0) {
   return;
 }
 
-GLAPI void GLAPIENTRY _glGetUniformLocation(int a0) {
+GLAPI GLint GLAPIENTRY _glGetUniformLocation(GLuint program, const GLchar *name) {
   printf("%s\n", __func__);
-  return;
+  return name;
 }
 
 GLAPI void GLAPIENTRY _glLinkProgram(int a0) {
@@ -343,8 +466,16 @@ GLAPI void GLAPIENTRY _glUniform3f(int a0) {
   return;
 }
 
-GLAPI void GLAPIENTRY _glUniform3fv(int a0) {
+GLAPI void GLAPIENTRY _glUniform3fv(GLint location, GLsizei count, const GLfloat *value) {
   printf("%s\n", __func__);
+#if 0
+  char* name = (char*)location;
+  if (!strcmp(name, "clipScale")) {
+    //FIXME!
+  } else {
+    printf("Unknown uniform: '%s'\n", name);
+  }
+#endif
   return;
 }
 
@@ -438,7 +569,7 @@ int pthread_sigmask(int a0) {
 
 
 
-
+#if 1 //#ifndef XBOX
 
 
 int SDL_CreateWindow(int a0) {
@@ -490,6 +621,9 @@ int SDL_GL_SetAttribute(int a0, int a1) {
 
 int SDL_GL_SwapWindow(int a0) {
   printf("%s\n", __func__);
+
+  saveBuffer();
+
   return 0;
 }
 
@@ -508,4 +642,4 @@ int SDL_ShowWindow(int a0) {
   return 0;
 }
 
-
+#endif

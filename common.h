@@ -9,7 +9,11 @@
 #include <stdint.h>
 
 #if defined(_WIN32)
+#if defined(XBOX)
+#  include <xboxkrnl/xboxkrnl.h>
+#else
 #  include <malloc.h>
+#endif
 #else
 #  include <stdlib.h>
 #endif
@@ -35,7 +39,11 @@ static uint32_t AlignUp(uint32_t address, uint32_t size) {
 static void* aligned_malloc(size_t alignment, size_t size) {
   void* ptr;
 #if defined(_WIN32)
+#ifdef XBOX
+  ptr = MmAllocateContiguousMemoryEx(size, 0x00000000, 0xFFFFFFFF, alignment, PAGE_READWRITE);
+#else
   ptr = _aligned_malloc(size, alignment);
+#endif
 #else
   posix_memalign(&ptr, alignment, size);
 #endif
@@ -45,7 +53,11 @@ static void* aligned_malloc(size_t alignment, size_t size) {
 
 static void aligned_free(void* ptr) {
 #if defined(_WIN32)
+#ifdef XBOX
+  MmFreeContiguousMemory(ptr);
+#else
   _aligned_free(ptr);
+#endif
 #else
   free(ptr);
 #endif

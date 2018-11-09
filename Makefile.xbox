@@ -1,0 +1,34 @@
+NXDK_DIR = $(CURDIR)/../nxdk
+//NXDK_SDL = y
+
+XBE_TITLE = OpenSWE1R
+GEN_XISO = $(XBE_TITLE).iso
+SRCS = 
+#SHADER_OBJS = ps.inl vs.inl
+
+SRCS += $(CURDIR)/xbox.c
+
+SRCS += $(CURDIR)/main.c
+SRCS += $(CURDIR)/emulation.c
+SRCS += $(CURDIR)/export.c
+SRCS += $(CURDIR)/shader.c
+
+SRCS += $(CURDIR)/dll/kernel32.c
+
+SRCS += $(CURDIR)/com/a3d.c
+SRCS += $(CURDIR)/com/dplay.c
+
+SRCS += $(CURDIR)/uc_native.c
+
+SRCS += $(CURDIR)/xbox-hacks/qsort.c
+SRCS += $(CURDIR)/xbox-hacks/bsearch.c
+
+CFLAGS += -DUC_NATIVE=1 -DUC_KVM=1
+CFLAGS += -I/usr/include/unicorn
+CFLAGS += -I/usr/include/AL
+CFLAGS += -DXBOX -DAPIENTRY= -DGLAPI=
+
+SDL_DIR = $(NXDK_DIR)/lib/sdl/SDL2
+CFLAGS += -I$(SDL_DIR)/include
+
+include $(NXDK_DIR)/Makefile

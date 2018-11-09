@@ -2,7 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -20,7 +20,11 @@
 #include "exe.h"
 
 #ifdef UC_NATIVE
+#ifdef XBOX
+#include <xboxkrnl/xboxkrnl.h>
+#else
 #include <sys/mman.h>
+#endif
 #endif
 
 //FIXME: These are hacks (register when mapping instead!)!
@@ -28,18 +32,18 @@ extern Exe* exe;
 uint8_t* stack = NULL;
 uint8_t* heap = NULL;
 
-static uint32_t gdtAddress = 0xA0000000; //FIXME: Search somehow?!
+static uint32_t gdtAddress = 0x83000000; //FIXME: Search somehow?!
 static uint32_t gdtSize = 31 * sizeof(SegmentDescriptor); //FIXME: 31 came from the UC sample, why?!
 
-static uint32_t tlsAddress = 0xB0000000; //FIXME: No idea where to put this yet
+static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
-static uint32_t stackAddress = 0xC0000000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 16 * 1024 * 1024; // 4 MiB stack should be PLENTY
+static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
+static uint32_t stackSize = 3 * 1024 * 1024; // 3 MiB stack should be PLENTY
 
-#define HEAP_ADDRESS 0x0D000000
+#define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
+static uint32_t heapSize = 16 * 1024 * 1024; // 16 MiB
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
@@ -282,8 +286,29 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   uc_err err;
   assert(size % ucAlignment == 0);
 #ifdef UC_NATIVE
+#ifdef XBOX
+#if 0
+
+#else
+  void* memory;
+  if(address & 0x80000000) {
+    uint32_t base_address = address & 0x7FFFFFFF;
+    memory = MmAllocateContiguousMemoryEx(size, base_address, base_address + size - 1, 0, PAGE_READWRITE);
+  } else {
+    // We can't move some data, like the EXE sections. However, they are not contiguous memory.
+    // So we can't have GPU resources in them.
+    memory = address;
+    SIZE_T allocated_size = size;
+    NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_COMMIT, PAGE_READWRITE);
+    printf("status was %x\n", status);
+    assert(status == STATUS_SUCCESS);
+  }
+  printf("got %p == %p (%d bytes)?\n", memory, address, size);
+#endif
+#else
   //FIXME: Respect protection
   void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
+#endif
   assert(memory == address);
 #else
   void* memory = aligned_malloc(ucAlignment, size);
@@ -312,6 +337,10 @@ Address Allocate(Size size) {
 address += 0x1000;
 address &= 0xFFFFF000;
 #endif
+
+  assert(address < (HEAP_ADDRESS + heapSize));
+  int use = (address - HEAP_ADDRESS);
+  debugPrint("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
 
   return ret;
 }
@@ -355,7 +384,12 @@ extern Registers* guest_registers;
 extern uint32_t host_esp;
 static uint32_t host_eip;
 
-static __attribute__((__stdcall)) void return_to_host() {
+#ifndef __stdcall
+#define __stdcall __attribute__((stdcall))
+#endif
+
+
+void __stdcall return_to_host() {
   guest_registers->esp = guest_registers_esp;
   guest_registers->eip = host_eip;
   printf("yay 0x%08X\n", guest_registers->eip);
@@ -370,24 +404,24 @@ static __attribute__((__stdcall)) void return_to_host() {
 Address CreateHlt() {
 #ifdef UC_NATIVE
 
-  extern void(__attribute__((__stdcall)) __return_to_host)();
+  extern void(__stdcall __return_to_host)();
   asm("jmp continue\n"
-      ".global __return_to_host\n"
-      "__return_to_host:\n"
+      ".global ___return_to_host@0\n"
+      "___return_to_host@0:\n"
 
       // Keep a backup of the real guest ESP
-      "mov %%esp, guest_registers_esp\n"
+      "mov %%esp, _guest_registers_esp\n"
 
       // Fill guest_registers
-      "mov guest_registers, %%esp\n"
+      "mov _guest_registers, %%esp\n"
       "add $32, %%esp\n"
       "pusha\n"
 
       // Move to host space
-      "mov host_esp, %%esp\n"
+      "mov _host_esp, %%esp\n"
       "popa\n"
 
-      "call return_to_host\n"
+      "call _return_to_host@0\n"
       "continue:\n":);
 
   Address code_address = Allocate(20);
@@ -549,13 +583,13 @@ void InitializeEmulation() {
   uc_reg_write(uc, UC_X86_REG_EDX, &edx);
 #endif
 
-  // Map and set TLS (not exposed via flat memory)
-  uint8_t* tls = MapMemory(tlsAddress, tlsSize, true, true, false);
-  memset(tls, 0xBB, tlsSize);
-
   // Allocate a heap
   heap = MapMemory(heapAddress, heapSize, true, true, true);
   memset(heap, 0xAA, heapSize);
+
+  // Map and set TLS (not exposed via flat memory)
+  uint8_t* tls = MapMemory(tlsAddress, tlsSize, true, true, false);
+  memset(tls, 0xBB, tlsSize);
 }
 
 void SetTracing(bool enabled) {

@@ -5,7 +5,9 @@
 #ifndef __OPENSWE1R_MAIN_H__
 #define __OPENSWE1R_MAIN_H__
 
-#include <unicorn/unicorn.h>
+// We need to define _MSC_VER or unicorn attempts to typedef bool
+#undef _MSC_VER
+#include "unicorn.h"
 
 #include "emulation.h"
 
@@ -27,7 +29,7 @@ Address CreateInterface(const char* name, unsigned int slotCount);
 void AddExport(const char* name, void* callback, Address address);
 
 // Defines an INITIALIZER macro which will run code at startup
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__clang__)
 #  define INITIALIZER(_name) \
     __attribute__((constructor)) void _name()
 #elif defined(_MSC_VER)
@@ -84,6 +86,7 @@ void AddExport(const char* name, void* callback, Address address);
     if (!silent) { \
       hacky_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax); \
       hacky_printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)_user_data, returnAddress); \
+      debugPrint("%u\n", callId); \
     } \
     callId++; \
     \
