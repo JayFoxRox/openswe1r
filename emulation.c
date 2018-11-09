@@ -286,20 +286,33 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   return memory;
 }
 
-Address Allocate(Size size) {
+static int allocId = 0;
+static int freeId = 0;
+
+Address AllocateAligned(Size size, unsigned int mask) {
   static uint32_t address = HEAP_ADDRESS;
-  uint32_t ret = address;
-  address += size;
-#if 1
-  // Debug memset to detect memory errors
-  memset(Memory(ret), 0xDD, size);
-#endif
-  //FIXME: Proper allocator
 
 #if 1
 //FIXME: This is a hack to fix alignment + to avoid too small allocations
-address += 0x1000;
-address &= 0xFFFFF000;
+address += mask+1;
+address &= ~mask;
+#endif
+
+  uint32_t ret = address;
+  address += size;
+
+  //FIXME: Proper allocator
+
+
+  int use = address - HEAP_ADDRESS;
+  printf("Heap-use: %u / %u = %u%% [%d alloc / %d free = %d]\n", use, heapSize, use / (heapSize / 100), allocId, freeId, allocId - freeId);
+  assert(use <= heapSize);
+
+  allocId++;
+
+#if 1
+  // Debug memset to detect memory errors
+  memset(Memory(ret), 0xDD, size);
 #endif
 
   return ret;
@@ -307,6 +320,8 @@ address &= 0xFFFFF000;
 
 void Free(Address address) {
   //FIXME!
+
+  freeId++;
 }
 
 void* Memory(uint32_t address) {

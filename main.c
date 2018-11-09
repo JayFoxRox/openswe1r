@@ -518,7 +518,8 @@ HACKY_IMPORT_BEGIN(HeapAlloc)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("dwBytes 0x%" PRIX32 "\n", stack[3]);
-  eax = Allocate(stack[3]);
+  eax = AllocateAligned(stack[3], 0xFFF);
+
   //FIXME: Only do this if flag is set..
   memset(Memory(eax), 0x00, stack[3]);
   esp += 3 * 4;
@@ -560,7 +561,7 @@ HACKY_IMPORT_BEGIN(VirtualAlloc)
   hacky_printf("dwSize 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("flAllocationType 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("flProtect 0x%" PRIX32 "\n", stack[4]);
-  eax = Allocate(stack[2]);
+  eax = AllocateAligned(stack[2], 0xFFF);
   memset(Memory(eax), 0x00, stack[2]);
   esp += 4 * 4;
 HACKY_IMPORT_END()
@@ -964,6 +965,9 @@ HACKY_IMPORT_BEGIN(HeapFree)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("lpMem 0x%" PRIX32 "\n", stack[3]);
+
+  Free(stack[3]); //FIXME: Check flags etc?
+
   eax = 1; // nonzero if succeeds
   esp += 3 * 4;
 HACKY_IMPORT_END()
@@ -2172,6 +2176,21 @@ HACKY_COM_END()
 // IDirectDrawSurface4 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirectDrawSurface4, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+
+  API(DDSURFACEDESC2)* desc = &this->desc;
+
+  //FIXME: Need to do reference counting
+
+  // This attempts to free the surface
+#if 0
+  if (desc->lpSurface != 0) {
+    Free(desc->lpSurface);
+    desc->lpSurface = 0;
+  }
+#endif
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
