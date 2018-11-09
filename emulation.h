@@ -26,19 +26,7 @@ void RunEmulation();
 // Memory API
 
 void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool execute);
-Address AllocateAligned(Size size, unsigned int mask);
-
-
-static Address AllocateEx(Size size, int line) {
-  int pad = 0;
-  if ((line >= 90) && (line <= 100)) {
-    //pad = 253;
-  }
-  //FIXME: Why do I have to pad ~250 bytes here?!
-  return AllocateAligned(size + pad, 0x1);
-}
-#define Allocate(size) AllocateEx((size), __LINE__)
-
+Address Allocate(Size size);
 void Free(Address address);
 void* Memory(uint32_t address);
 

@@ -42,6 +42,13 @@ static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
 
 
+typedef struct {
+  uint32_t marker;
+  uint32_t size;
+  uint8_t data[];
+} Allocation;
+
+
 unsigned int currentThread = 0;
 unsigned int threadCount = 0;
 
@@ -290,14 +297,15 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
 static int allocId = 0;
 static int freeId = 0;
 
-Address AllocateAligned(Size size, unsigned int mask) {
+
+Address Allocate(Size size) {
   static uint32_t address = HEAP_ADDRESS;
 
-#if 1
-//FIXME: This is a hack to fix alignment + to avoid too small allocations
-address += mask+1;
-address &= ~mask;
-#endif
+  address += sizeof(Allocation);
+
+  //FIXME: Align?
+  address += 0xFFF;
+  address &= ~0xFFF;
 
   uint32_t ret = address;
   address += size;
@@ -311,16 +319,28 @@ address &= ~mask;
 
   allocId++;
 
-#if 1
+  Allocation* allocation = Memory(ret - sizeof(Allocation));
+
   // Debug memset to detect memory errors
-  memset(Memory(ret), 0xDD, size);
-#endif
+  memset(allocation->data, 0xDD, size);
+
+  allocation->marker = 0xDEADBEEF;
+  allocation->size = size;
 
   return ret;
 }
 
 void Free(Address address) {
-  //FIXME!
+  //FIXME: Actually free memory..
+
+  Allocation* allocation = Memory(address - sizeof(Allocation));
+
+  // Check marker and flag region as unused
+  assert(allocation->marker == 0xDEADBEEF);
+  allocation->marker = 0xDEADC0DE;
+
+  // Debug memset to detect memory errors
+  memset(allocation->data, 0x55, allocation->size);
 
   freeId++;
 }

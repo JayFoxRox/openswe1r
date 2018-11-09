@@ -518,7 +518,7 @@ HACKY_IMPORT_BEGIN(HeapAlloc)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("dwBytes 0x%" PRIX32 "\n", stack[3]);
-  eax = AllocateAligned(stack[3], 0xFFF);
+  eax = Allocate(stack[3]);
 
   //FIXME: Only do this if flag is set..
   memset(Memory(eax), 0x00, stack[3]);
@@ -561,7 +561,7 @@ HACKY_IMPORT_BEGIN(VirtualAlloc)
   hacky_printf("dwSize 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("flAllocationType 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("flProtect 0x%" PRIX32 "\n", stack[4]);
-  eax = AllocateAligned(stack[2], 0xFFF);
+  eax = Allocate(stack[2]);
   memset(Memory(eax), 0x00, stack[2]);
   esp += 4 * 4;
 HACKY_IMPORT_END()
