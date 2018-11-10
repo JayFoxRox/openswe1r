@@ -57,7 +57,9 @@ void AddExport(const char* name, void* callback, Address address) {
   Export* export = &exports[exportCount];
   export->name = malloc(strlen(name) + 1);
   strcpy((char*)export->name, name);
+#if 0
   printf("    Stored '%s' at %p\n", export->name, export->name);
+#endif
   export->callback = callback;
   export->address = 0;
   exportCount++;

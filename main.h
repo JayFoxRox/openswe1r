@@ -83,13 +83,13 @@ void AddExport(const char* name, void* callback, Address address);
     esp += 4; \
 
 #ifndef XBOX
-#define debugPrint(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#define debugPrint(fmt, ...) (0)
 #endif
 
 #define HACKY_IMPORT_END() \
     if (!silent) { \
       hacky_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax); \
-      hacky_printf("%7" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)_user_data, returnAddress); \
+      hacky_printf("%" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)_user_data, returnAddress); \
       debugPrint("%u\n", callId); \
     } \
     callId++; \

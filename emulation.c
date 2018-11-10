@@ -39,14 +39,14 @@ static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 256 * 1024; // About 140k are in use at maximum
+static uint32_t stackSize = 256 * 1024; // About 140kiB are in use at maximum
 
 #define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
 #if 0 //def UC_NATIVE
 static uint32_t heapSize = 0x1000; // Dummy page
 #else
-static uint32_t heapSize = 16 * 1024 * 1024; // 16 MiB
+static uint32_t heapSize = 14 * 1024 * 1024; // 16 MiB
 #endif
 
 static uc_engine *uc;
