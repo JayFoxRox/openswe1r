@@ -361,8 +361,6 @@ void Free(Address address) {
 
 void* Memory(uint32_t address) {
 
-  uint32_t orig_address = address;
-
   if (address >= heapAddress && address < (heapAddress + heapSize)) {
     return &heap[address - heapAddress];
   }
@@ -372,6 +370,7 @@ void* Memory(uint32_t address) {
   }
 
   if (address >= exe->peHeader.imageBase) {
+    uint32_t orig_address = address;
     address -= exe->peHeader.imageBase;
     for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
       PeSection* section = &exe->sections[sectionIndex];
@@ -381,12 +380,22 @@ void* Memory(uint32_t address) {
         return &exe->mappedSections[sectionIndex][offset];
       }
     }
+    address = orig_address;
+  }
+
+  if (address == 0) {
+    return NULL;
   }
 
 #ifdef UC_NATIVE
-  if (orig_address >= 0x80000000) {
-    return orig_address;
+#ifdef XBOX
+  if (address >= 0x80000000) {
+    return address;
   }
+#else
+  printf("Unmapped 0x%X\n", address);
+  assert(false);
+#endif
 #endif
   return NULL;
 }
