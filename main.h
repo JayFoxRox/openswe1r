@@ -82,6 +82,10 @@ void AddExport(const char* name, void* callback, Address address);
     eip = returnAddress; \
     esp += 4; \
 
+#ifndef XBOX
+#define debugPrint(fmt, ...) (0)
+#endif
+
 #define HACKY_IMPORT_END() \
     if (!silent) { \
       hacky_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax); \

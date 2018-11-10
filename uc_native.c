@@ -293,7 +293,7 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
 }
 
 // Accessed via inline assembly
-static uint32_t _begin;
+static uint32_t _begin asm("_begin");
 Registers* guest_registers;
 uint32_t guest_registers_esp;
 uint32_t host_esp;
@@ -311,8 +311,8 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
 
     _begin = begin;
 
-#ifdef XBOX
-#else
+// For Xbox we can use the existing FS (might get corrupted?)
+#ifndef XBOX
     static struct user_desc ldt_desc;
   
 
@@ -345,10 +345,9 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
 
   // Set FS to use our new thread area
   uint16_t seg = ldt_desc.entry_number;
-  asm("mov %[seg], %%ax\n"
-      "shl $3, %%ax\n"
+  asm("shl $3, %%ax\n"
       "or $0x3, %%ax\n"
-      "movw %%ax, %%fs\n"::[seg]"r"(seg));
+      "movw %%ax, %%fs\n"::"a"(seg));
 #endif
 
 #if 0
@@ -365,15 +364,15 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
 
                  // Make host backup
                  "pusha\n"
-                 "mov %%esp, _host_esp\n"
+                 "mov %%esp, host_esp\n"
 
                  // Load all registers
-                 "mov _guest_registers, %%esp\n"
+                 "mov guest_registers, %%esp\n"
                  "popa\n"
-                 "mov _guest_registers_esp, %%esp\n"
+                 "mov guest_registers_esp, %%esp\n"
                  //FIXME: Fixup ESP too
 
-                 "jmp *__begin\n":);
+                 "jmp *_begin\n":);
 
     // This can never return, or setjmp / longjmp would break!
     assert(false);

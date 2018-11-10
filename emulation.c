@@ -39,11 +39,15 @@ static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 256 * 1024; // I've measured, and about 140k are in use at maximum
+static uint32_t stackSize = 256 * 1024; // About 140k are in use at maximum
 
 #define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 0x1000; //16 * 1024 * 1024; // 16 MiB
+#if 0 //def UC_NATIVE
+static uint32_t heapSize = 0x1000; // Dummy page
+#else
+static uint32_t heapSize = 16 * 1024 * 1024; // 16 MiB
+#endif
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
@@ -323,7 +327,7 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
 }
 
 Address Allocate(Size size) {
-#ifdef UC_NATIVE
+#if 0 // def UC_NATIVE
   Address ret = aligned_malloc(0x1000, size);
   memset(Memory(ret), 0xDD, size);
   return ret;
@@ -345,7 +349,7 @@ address &= 0xFFFFF000;
 
   assert(address < (HEAP_ADDRESS + heapSize));
   int use = (address - HEAP_ADDRESS);
-  debugPrint("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
+  printf("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
 
   return ret;
 #endif
@@ -395,10 +399,6 @@ void* Memory(uint32_t address) {
 #include "uc_native.h"
 #include <setjmp.h>
 
-extern jmp_buf* host_jmp;
-extern uint32_t guest_registers_esp;
-extern Registers* guest_registers;
-extern uint32_t host_esp;
 static uint32_t host_eip;
 
 #ifndef __stdcall
@@ -406,6 +406,7 @@ static uint32_t host_eip;
 #endif
 
 
+void __stdcall return_to_host() asm("return_to_host");
 void __stdcall return_to_host() {
   guest_registers->esp = guest_registers_esp;
   guest_registers->eip = host_eip;
@@ -421,24 +422,32 @@ void __stdcall return_to_host() {
 Address CreateHlt() {
 #ifdef UC_NATIVE
 
-  extern void(__stdcall __return_to_host)();
+#if 0 //def XBOX
+#define __RETURN_TO_HOST_ENTRY "___return_to_host@0"
+#define RETURN_TO_HOST "_return_to_host@0"
+#else
+#define __RETURN_TO_HOST_ENTRY "__return_to_host"
+#define RETURN_TO_HOST ""
+#endif
+
+  extern void(__stdcall __return_to_host_entry)() asm("__return_to_host_entry");
   asm("jmp continue\n"
-      ".global ___return_to_host@0\n"
-      "___return_to_host@0:\n"
+      ".global __return_to_host_entry\n"
+      "__return_to_host_entry:\n"
 
       // Keep a backup of the real guest ESP
-      "mov %%esp, _guest_registers_esp\n"
+      "mov %%esp, guest_registers_esp\n"
 
       // Fill guest_registers
-      "mov _guest_registers, %%esp\n"
+      "mov guest_registers, %%esp\n"
       "add $32, %%esp\n"
       "pusha\n"
 
       // Move to host space
-      "mov _host_esp, %%esp\n"
+      "mov host_esp, %%esp\n"
       "popa\n"
 
-      "call _return_to_host@0\n"
+      "call return_to_host\n"
       "continue:\n":);
 
   Address code_address = Allocate(20);
@@ -453,7 +462,7 @@ Address CreateHlt() {
   code += 4;
 
   *code++ = 0xE9; // jmp __return_to_host
-  *(uint32_t*)code = (uintptr_t)__return_to_host - (uintptr_t)code - 4;
+  *(uint32_t*)code = (uintptr_t)__return_to_host_entry - (uintptr_t)code - 4;
   code += 4;
 #else
   Address code_address = Allocate(2);
