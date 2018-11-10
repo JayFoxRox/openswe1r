@@ -291,9 +291,6 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   assert(size % ucAlignment == 0);
 #ifdef UC_NATIVE
 #ifdef XBOX
-#if 0
-
-#else
   void* memory;
   if(address & 0x80000000) {
     uint32_t base_address = address & 0x7FFFFFFF;
@@ -308,7 +305,6 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
     assert(status == STATUS_SUCCESS);
   }
   printf("got %p == %p (%d bytes)?\n", memory, address, size);
-#endif
 #else
   //FIXME: Respect protection
   void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
@@ -421,14 +417,6 @@ void __stdcall return_to_host() {
 
 Address CreateHlt() {
 #ifdef UC_NATIVE
-
-#if 0 //def XBOX
-#define __RETURN_TO_HOST_ENTRY "___return_to_host@0"
-#define RETURN_TO_HOST "_return_to_host@0"
-#else
-#define __RETURN_TO_HOST_ENTRY "__return_to_host"
-#define RETURN_TO_HOST ""
-#endif
 
   extern void(__stdcall __return_to_host_entry)() asm("__return_to_host_entry");
   asm("jmp continue\n"

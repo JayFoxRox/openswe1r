@@ -83,7 +83,7 @@ void AddExport(const char* name, void* callback, Address address);
     esp += 4; \
 
 #ifndef XBOX
-#define debugPrint(fmt, ...) (0)
+#define debugPrint(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #endif
 
 #define HACKY_IMPORT_END() \
