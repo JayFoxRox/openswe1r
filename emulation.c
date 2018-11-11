@@ -23,7 +23,9 @@
 #ifdef XBOX
 #include <xboxkrnl/xboxkrnl.h>
 #else
+#include <unistd.h>
 #include <sys/mman.h>
+#include <errno.h>
 #endif
 #endif
 
@@ -39,14 +41,14 @@ static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 700 * 1024; // About 140kiB are in use at maximum
+static uint32_t stackSize = 200 * 1024; // About 140kiB are in use at maximum
 
 #define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
-#if 0 //def UC_NATIVE
+#ifdef UC_NATIVE
 static uint32_t heapSize = 0x1000; // Dummy page
 #else
-static uint32_t heapSize = 14 * 1024 * 1024; // 16 MiB
+static uint32_t heapSize = 20 * 1024 * 1024; // 16 MiB
 #endif
 
 static uc_engine *uc;
@@ -307,7 +309,17 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   printf("got %p == %p (%d bytes)?\n", memory, address, size);
 #else
   //FIXME: Respect protection
+  Size page_size = sysconf(_SC_PAGE_SIZE);
+  Address check_address = address;
+  while(check_address <= (address + size)) {
+    int ret = msync(check_address, page_size, MS_ASYNC);
+    assert((ret == -1) && (errno == ENOMEM));
+    check_address += page_size;
+  }
   void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
+
+
+  memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
 #endif
   assert(memory == address);
 #else
@@ -323,37 +335,40 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
 }
 
 Address Allocate(Size size) {
-#if 0 // def UC_NATIVE
+#ifdef UC_NATIVE
   Address ret = aligned_malloc(0x1000, size);
-  memset(Memory(ret), 0xDD, size);
-  return ret;
 #else
   static uint32_t address = HEAP_ADDRESS;
-  uint32_t ret = address;
-  address += size;
-#if 1
-  // Debug memset to detect memory errors
-  memset(Memory(ret), 0xDD, size);
-#endif
-  //FIXME: Proper allocator
 
 #if 1
-//FIXME: This is a hack to fix alignment + to avoid too small allocations
-address += 0x1000;
-address &= 0xFFFFF000;
+  //FIXME: This is a hack to fix alignment + to avoid too small allocations
+  address += 0xFFF;
+  address &= 0xFFFFF000;
 #endif
+
+  Address ret = address;
+
+  address += size;
+  //FIXME: Proper allocator
 
   assert(address < (HEAP_ADDRESS + heapSize));
   int use = (address - HEAP_ADDRESS);
   printf("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
+#endif
+
+  assert(ret != 0);
+
+#if 1
+  // Debug memset to detect memory errors
+  memset(Memory(ret), 0xDD, size);
+#endif
 
   return ret;
-#endif
 }
 
 void Free(Address address) {
 #ifdef UC_NATIVE
-  //aligned_free(address);
+  aligned_free(address);
 #else
   //FIXME!
 #endif
@@ -388,14 +403,10 @@ void* Memory(uint32_t address) {
   }
 
 #ifdef UC_NATIVE
-#ifdef XBOX
-  if (address >= 0x80000000) {
-    return address;
-  }
+  return address;
 #else
   printf("Unmapped 0x%X\n", address);
   assert(false);
-#endif
 #endif
   return NULL;
 }
@@ -415,7 +426,6 @@ void __stdcall return_to_host() asm("return_to_host");
 void __stdcall return_to_host() {
   guest_registers->esp = guest_registers_esp;
   guest_registers->eip = host_eip;
-  printf("yay 0x%08X\n", guest_registers->eip);
 #if 0
   asm("mov $0, %%ax\n"
       "mov %%ax, %%fs\n":);
@@ -682,7 +692,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2;
+  uint32_t esp = stackAddress + stackSize - 1024; // We give 1k of headroom
   assert(threadId < 4);
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
@@ -711,7 +721,7 @@ static unsigned int GetThreadCount() {
 }
 
 static void memory_statistics() {
-#if 0
+#if 1
   printf("Memory statistics:\n");
 #ifdef XBOX
   MM_STATISTICS ms;

@@ -8,13 +8,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#if defined(_WIN32)
 #if defined(XBOX)
 #  include <xboxkrnl/xboxkrnl.h>
-#else
+#elif defined(_WIN32)
 #  include <malloc.h>
-#endif
 #else
+#  include <sys/mman.h>
 #  include <stdlib.h>
 #endif
 
@@ -44,7 +43,9 @@ static void* aligned_malloc(size_t alignment, size_t size) {
   ptr = _aligned_malloc(size, alignment);
 #else
   posix_memalign(&ptr, alignment, size);
+  mprotect(ptr, size, PROT_READ | PROT_WRITE | PROT_EXEC);
 #endif
+  assert(ptr <= 0xFFFFFFFF);
   assert(ptr != NULL);
   return ptr;
 }
