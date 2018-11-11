@@ -23,6 +23,16 @@
 
 #include "uc_native.h"
 
+// Accessed via inline assembly
+static uint32_t _begin asm("_begin");
+Registers* guest_registers;
+uint8_t guest_registers_fpu[512] __attribute__((aligned(16)));
+uint8_t host_registers_fpu[512] __attribute__((aligned(16)));
+uint32_t guest_registers_esp;
+uint32_t host_esp;
+uint32_t host_fs;
+jmp_buf* host_jmp;
+
 typedef struct {
   jmp_buf jmp;
   Registers registers;
@@ -190,6 +200,12 @@ uc_err uc_open(uc_arch arch, uc_mode mode, uc_engine **uc) {
   }
 #endif
 
+  // Re-initialize a fresh FPU
+  asm("fxsave host_registers_fpu\n"
+      "finit\n"
+      "fxsave guest_registers_fpu\n"
+      "fxrstor host_registers_fpu\n":);
+
   *uc = (uc_engine*)u;
   return 0;
 }
@@ -292,14 +308,6 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
   return 0;
 }
 
-// Accessed via inline assembly
-static uint32_t _begin asm("_begin");
-Registers* guest_registers;
-uint32_t guest_registers_esp;
-uint32_t host_esp;
-uint32_t host_fs;
-jmp_buf* host_jmp;
-
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
   uc_engine_native* u = (uc_engine_native*)uc;
   printf("uc_emu_start\n");
@@ -360,10 +368,9 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
     guest_registers = &u->registers;
     guest_registers_esp = guest_registers->esp;
 
-    asm volatile(// "int3\n"
-                 //"movl fs, 32([registers])"
-
-                 // Make host backup
+    asm volatile(// Make host backup
+                 "fxsave host_registers_fpu\n"
+                 "pushf\n"
                  "pusha\n"
                  "mov %%esp, host_esp\n"
 
@@ -374,10 +381,14 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
                  // Load all registers
                  "mov guest_registers, %%esp\n"
                  "popa\n"
+                 "popf\n"
                  "mov guest_registers_esp, %%esp\n"
                  //FIXME: Fixup ESP too
 
-                 "jmp *_begin\n":);
+                 // Load FPU registers
+                 "fxrstor guest_registers_fpu\n"
+
+                 "jmp *_begin\n":::"eax", "esp", "memory");
 
     // This can never return, or setjmp / longjmp would break!
     assert(false);

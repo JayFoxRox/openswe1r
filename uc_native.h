@@ -19,12 +19,15 @@ typedef struct {
   uint32_t ecx; // +24
   uint32_t eax; // +28
 
-  // Extensions, can be re-ordered / added / removed, but assembly needs update
-  uint16_t fs;  // +32
-  uint16_t pad; // +34
-  uint32_t eip; // +36
+  // Hack because we always do pusha and pushf in sequence
+  uint32_t eflags; // +32
 
-  uint32_t fs_base; //+40
+  // Extensions, can be re-ordered / added / removed, but assembly needs update
+  uint16_t fs;  // +36
+  uint16_t pad; // +40
+  uint32_t eip; // +44
+
+  uint32_t fs_base; //+48
 
 } Registers;
 
@@ -33,6 +36,8 @@ typedef struct {
 extern jmp_buf* host_jmp;
 extern uint32_t guest_registers_esp asm("guest_registers_esp");
 extern Registers* guest_registers asm("guest_registers");
+extern uint8_t guest_registers_fpu[512] asm("guest_registers_fpu");
+extern uint8_t host_registers_fpu[512] asm("host_registers_fpu");
 extern uint32_t host_esp asm("host_esp");
 extern uint32_t host_fs asm("host_fs");
 

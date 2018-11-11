@@ -447,8 +447,12 @@ Address CreateHlt() {
 
       // Fill guest_registers
       "mov guest_registers, %%esp\n"
-      "add $32, %%esp\n"
+      "add $36, %%esp\n"
+      "pushf\n"
       "pusha\n"
+
+      // Fill guest_registers_fpu
+      "fxsave guest_registers_fpu\n"
 
       // Move to host fs
       "mov host_fs, %%eax\n"
@@ -457,9 +461,11 @@ Address CreateHlt() {
       // Move to host space
       "mov host_esp, %%esp\n"
       "popa\n"
+      "popf\n"
+      "fxrstor host_registers_fpu\n"
 
       "call return_to_host\n"
-      "continue:\n":);
+      "continue:\n":::"eax", "esp", "memory");
 
   Address code_address = Allocate(20);
   uint8_t* code = Memory(code_address);
