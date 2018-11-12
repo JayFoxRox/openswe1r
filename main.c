@@ -257,7 +257,8 @@ void LoadSection(Exe* exe, unsigned int sectionIndex) {
   PeSection* section = &exe->sections[sectionIndex];
 
   // Map memory for section
-  uint8_t* mem = (uint8_t*)aligned_malloc(0x1000, section->virtualSize);
+  uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
+  uint8_t* mem = MapMemory(base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
 
   // Read data from exe and fill rest of space with zero
   fseek(exe->f, section->rawAddress, SEEK_SET);
@@ -4005,22 +4006,6 @@ void UnloadExe(Exe* exe) {
 
 //FIXME: Abstract exe mapping and context creation from emu kickoff
 void RunX86(Exe* exe) {
-
-  // Map the important exe parts into emu memory
-  for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
-    PeSection* section = &exe->sections[sectionIndex];
-    void** mappedSection = (void**)&exe->mappedSections[sectionIndex];
-    if (*mappedSection != NULL) {
-      uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
-      printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
-      void* relocatedMappedSection = MapMemory(base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
-      memcpy(relocatedMappedSection, *mappedSection, section->virtualSize);
-      //FIXME: Can't free this :(
-      //       This is used by some of the code [export->name most importantly]
-      //aligned_free(*mappedSection);
-      *mappedSection = relocatedMappedSection;
-    }
-  }
 
   //FIXME: Schedule a virtual main-thread
   printf("Emulation starting\n");
