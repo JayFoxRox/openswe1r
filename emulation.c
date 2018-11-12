@@ -437,6 +437,23 @@ void __stdcall return_to_host() {
 Address CreateHlt() {
 #ifdef UC_NATIVE
 
+  unsigned int code_size = 20;
+
+#if 0
+  Address code_address = Allocate(20);
+#else
+  static Address buffer;
+  static int buffer_size = 0;
+  if (buffer_size < code_size) {
+    buffer_size = 0x1000;
+    buffer = Allocate(buffer_size);
+  }
+  Address code_address = buffer;
+  buffer += code_size;
+  buffer_size -= code_size;
+#endif
+  
+
   extern void(__stdcall __return_to_host_entry)() asm("__return_to_host_entry");
   asm("jmp continue\n"
       ".global __return_to_host_entry\n"
@@ -467,7 +484,6 @@ Address CreateHlt() {
       "call return_to_host\n"
       "continue:\n":::"eax", "esp", "memory");
 
-  Address code_address = Allocate(20);
   uint8_t* code = Memory(code_address);
   *code++ = 0x90; // Marker
 
