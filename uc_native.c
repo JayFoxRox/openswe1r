@@ -315,8 +315,8 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
   host_jmp = &u->jmp;
 
   if (setjmp(*host_jmp) == 0) {
-
-    printf("Doing some bullshit\n");
+extern uint32_t callId;
+    printf("Doing some bullshit %d at 0x%08X\n", callId, begin);
 
     _begin = begin;
 

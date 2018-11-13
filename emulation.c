@@ -791,6 +791,9 @@ void RunEmulation() {
 
     while(true) {
 
+#ifdef XBOX
+      //debugClearScreen();
+#endif
       memory_statistics();
 
       err = uc_emu_start(uc, ctx->eip, 0, 0, 0);
