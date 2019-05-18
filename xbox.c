@@ -6,14 +6,15 @@
 
 #include <stdio.h>
 
-#include <GL/glew.h>
-
+#include <stddef.h>
 #include <assert.h>
 #include <stdbool.h>
-
+#include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
 
+#define _PTRDIFF_T_DEFINED
+#include <GL/glew.h>
 
 #include "xbox.h"
 
@@ -560,7 +561,7 @@ GLEWAPI GLboolean glewExperimental = GL_FALSE;
 
 GLEWAPI const GLubyte * GLEWAPIENTRY glewGetErrorString (GLenum error) {
   printf("%s\n", __func__);
-  return "<glew error string>";
+  return (GLubyte*)"<glew error string>";
 }
 
 GLEWAPI GLenum GLEWAPIENTRY glewInit (void) {
@@ -603,7 +604,7 @@ SDL_Window* SDL_CreateWindow(const char* title,
                              int         h,
                              Uint32      flags) {
   printf("%s\n", __func__);
-  return 1;
+  return (SDL_Window*)1;
 }
 
 void SDL_Delay(Uint32 ms) {
@@ -641,7 +642,7 @@ Uint64 SDL_GetPerformanceFrequency(void) {
 
 SDL_GLContext SDL_GL_CreateContext(SDL_Window* window) {
   printf("%s\n", __func__);
-  return 1;
+  return (SDL_GLContext)1;
 }
 
 int SDL_GL_SetAttribute(SDL_GLattr attr, int        value) {

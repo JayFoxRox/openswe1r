@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "descriptor.h"
@@ -31,6 +32,17 @@
 #include "xbox.h"
 #endif
 
+
+//FIXME: REMOVE THIS BLOCK! Only used during development
+#ifdef XBOX
+#define debugPrint(fmt, ...)
+#else
+#include <xboxrt/debug.h>
+#endif
+#ifdef XBOX
+#include <pbkit/pbkit.h>
+#include <hal/video.h>
+#endif
 
 #include "SDL.h"
 static SDL_Window* sdlWindow;
@@ -4283,23 +4295,6 @@ asm("_get_idt@4:\n"
 
 #endif
 
-#ifdef XBOX
-// Stolen from https://gist.github.com/mmozeiko/ae38aeb10add7cb66be4c00f24f8e688
-
-// C initializers
-__attribute__((section(".CRT$XCA"))) _PVFV __xc_a[] = { 0 };
-__attribute__((section(".CRT$XCZ"))) _PVFV __xc_z[] = { 0 };
-
-static void win32_crt_call(_PVFV* a, _PVFV* b) {
-  while (a != b) {
-    if (*a) {
-      (**a)();
-    }
-    a++;
-  }
-}
-#endif
-
 int main(int argc, char* argv[]) {
 #ifdef XBOX
 
@@ -4307,6 +4302,8 @@ int main(int argc, char* argv[]) {
   void* memory = 0x00400000;
   SIZE_T allocated_size = 0x00C00000;
   NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_RESERVE, PAGE_READWRITE);
+
+  XVideoSetMode(640, 480, 32, REFRESH_DEFAULT); 
 
   pb_init();
 
@@ -4340,12 +4337,6 @@ for(int i = 0; i <= 0x13; i++) {
 }
 
 #endif
-
-#ifdef XBOX
-  printf("-- Running CRT functions ()\n");
-  win32_crt_call(__xc_a, __xc_z);
-#endif
-
 
   printf("-- Initializing\n");
   printf("Version: %s\n", APP_VERSION_STRING);

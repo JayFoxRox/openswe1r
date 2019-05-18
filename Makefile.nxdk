@@ -1,4 +1,3 @@
-NXDK_DIR = $(CURDIR)/../nxdk
 //NXDK_SDL = y
 
 XBE_TITLE = OpenSWE1R
@@ -20,8 +19,7 @@ SRCS += $(CURDIR)/com/dplay.c
 
 SRCS += $(CURDIR)/uc_native.c
 
-SRCS += $(CURDIR)/xbox-hacks/qsort.c
-SRCS += $(CURDIR)/xbox-hacks/bsearch.c
+CFLAGS += -isystem$(CURDIR)/xbox-hacks
 
 CFLAGS += -DUC_NATIVE=1 -DUC_KVM=1
 CFLAGS += -I/usr/include/unicorn
