@@ -440,7 +440,7 @@ GLAPI void GLAPIENTRY _glewGetErrorString(int a0) {
 
 GLAPI void GLAPIENTRY _glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
   printf("%s\n", __func__);
-  strcpy(infoLog, "<ProgramInfoLog>");
+  strcpy(infoLog, "");
   return;
 }
 
@@ -452,7 +452,7 @@ GLAPI void GLAPIENTRY _glGetProgramiv(GLuint program, GLenum pname, GLint* param
 
 GLAPI void GLAPIENTRY _glGetShaderInfoLog(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
   printf("%s\n", __func__);
-  strcpy(infoLog, "<ShaderInfoLog>");
+  strcpy(infoLog, "");
   return;
 }
 
