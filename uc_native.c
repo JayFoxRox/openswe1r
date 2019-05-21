@@ -23,7 +23,7 @@
 #include "uc_native.h"
 
 // Accessed via inline assembly
-static uint32_t _begin asm("_begin");
+static volatile uint32_t _begin asm("_begin");
 Registers* guest_registers;
 uint8_t guest_registers_fpu[512] __attribute__((aligned(16)));
 uint8_t host_registers_fpu[512] __attribute__((aligned(16)));
