@@ -187,6 +187,7 @@ static void saveBuffer() {
     fprintf(f, "\n");
   }
   fclose(f);
+
 }
 
 static void drawVertex(int i) {
@@ -628,7 +629,7 @@ Uint32 SDL_GetMouseState(int* x, int* y) {
 
 Uint32 SDL_GetTicks(void) {
   printf("%s\n", __func__);
-  static int t = 0;
+  static uint32_t t = 0;
   return t++;
 }
 

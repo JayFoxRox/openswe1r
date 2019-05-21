@@ -888,7 +888,12 @@ HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(timeGetTime)
   //FIXME: Avoid overflow?
-  eax = SDL_GetTicks();
+  //eax = SDL_GetTicks();
+
+  //FIXME: Undo!
+  static uint32_t t = 0;
+  eax = t++;
+
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(GetLastError)
