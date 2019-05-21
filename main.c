@@ -35,9 +35,16 @@
 
 //FIXME: REMOVE THIS BLOCK! Only used during development
 #ifdef XBOX
-#define debugPrint(fmt, ...)
-#else
 #include <xboxrt/debug.h>
+#define debugPrint(fmt, ...) \
+  do { \
+    char buf[4096]; \
+    sprintf(buf, fmt, __VA_ARGS__); \
+    printf("%s", buf); \
+    debugPrint("%s", buf); \
+  } while(0);
+#else
+#define debugPrint(fmt, ...)
 #endif
 #ifdef XBOX
 #include <pbkit/pbkit.h>
@@ -771,7 +778,12 @@ HACKY_IMPORT_BEGIN(LCMapStringW)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(GetModuleHandleA)
-  hacky_printf("lpModuleName 0x%" PRIX32 " ('%s')\n", stack[1], Memory(stack[1]));
+  char* lpModuleName = Memory(stack[1]);
+  hacky_printf("lpModuleName 0x%" PRIX32, stack[1]);
+  if (lpModuleName != NULL) {
+    hacky_printf(" ('%s')", lpModuleName);
+  }
+  hacky_printf("\n");
   eax = 999;
   esp += 1 * 4;
 HACKY_IMPORT_END()
@@ -1416,7 +1428,12 @@ HACKY_IMPORT_BEGIN(CreateEventA)
   hacky_printf("lpEventAttributes 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("bManualReset 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("bInitialState 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpName 0x%" PRIX32 " ('%s')\n", stack[4], (char*)Memory(stack[4]));
+  hacky_printf("lpName 0x%" PRIX32, stack[4]);
+  char* lpName = (char*)Memory(stack[4]);
+  if (lpName != NULL) {
+    hacky_printf(" ('%s')", lpName);
+  }
+  hacky_printf("\n");
 
   eax = 5551337; // HANDLE
   esp += 4 * 4;
@@ -3897,7 +3914,7 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 // NOTE: This purposely does not map the file into memory for portability
 Exe* LoadExe(const char* path) {
   exe = (Exe*)malloc(sizeof(Exe)); //FIXME: Hack to make this global!
-  memset(exe, 0x00, sizeof(exe));
+  memset(exe, 0x00, sizeof(Exe));
 
   // Load the exe file and skip the DOS header
   exe->f = fopen(path, "rb");
@@ -4295,23 +4312,34 @@ asm("_get_idt@4:\n"
 
 #endif
 
-int main(int argc, char* argv[]) {
 #ifdef XBOX
-
+__attribute__((constructor(101))) static void reserve_memory() {
   // Reserve the space for the EXE
-  void* memory = 0x00400000;
+  PVOID memory = 0x00400000;
   SIZE_T allocated_size = 0x00C00000;
   NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_RESERVE, PAGE_READWRITE);
+  assert(status == STATUS_SUCCESS);
+}
+#endif
+
+#ifdef XBOX
+__attribute__((constructor(102))) static void start_log() {
+  // Clear log
+  FILE* f = freopen("log.txt", "wb", stdout);
+  if (f == NULL) {
+    debugPrint("Failed to open log.txt\n");
+  }
+}
+#endif
+
+int main(int argc, char* argv[]) {
+#ifdef XBOX
 
   XVideoSetMode(640, 480, 32, REFRESH_DEFAULT); 
 
   pb_init();
 
   pb_show_debug_screen();
-
-  // Clear log
-  FILE* f = fopen("log.txt", "wb");
-  fclose(f);
 #else
   //dup2(stdout, stderr);
   setbuf(stdout, 0);

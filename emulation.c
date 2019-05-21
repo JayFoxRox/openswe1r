@@ -307,7 +307,7 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
     memory = address;
     SIZE_T allocated_size = size;
     NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_COMMIT, PAGE_READWRITE);
-    printf("status was %x\n", status);
+    printf("status was %x when allocating 0x%08X (became 0x%08X), 0x%X bytes (became 0x%X)\n", status, address, (uint32_t)memory, size, allocated_size);
     assert(status == STATUS_SUCCESS);
   }
   printf("got %p == %p (%d bytes)?\n", memory, address, size);
