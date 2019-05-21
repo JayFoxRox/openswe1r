@@ -31,4 +31,9 @@ CFLAGS += -I$(SDL_DIR)/include
 
 CFLAGS += -Wno-inconsistent-dllimport
 
+# We are short on memory, so reduce binary footprint
+CFLAGS += -Os
+#FIXME: At least one of these is bad: -fno-stack-protector -fomit-frame-pointer -ffunction-sections -fdata-sections
+NXDK_STACKSIZE=16384
+
 include $(NXDK_DIR)/Makefile
