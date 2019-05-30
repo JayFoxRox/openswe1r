@@ -23,13 +23,248 @@
 
 #include "SDL.h"
 
+#include <hal/video.h>
+static int SCREEN_WIDTH = 0;
+static int SCREEN_HEIGHT = 0;
+static int SCREEN_BPP = 0;
 
+#include <hal/input.h>
+static const int pad = 0;
+
+static int mouse_x = 0;
+static int mouse_y = 0;
+
+#define printf(fmt, ...)  {}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include <string.h>
+#include <strings.h>
+
+#ifdef GPU
+#include <hal/video.h>
+#include <hal/xbox.h>
+#include <math.h>
+#include <pbkit/pbkit.h>
+#include <xboxkrnl/xboxkrnl.h>
+#include <xboxrt/debug.h>
+#endif
+
+#if 0
+typedef struct {
+    float pos[3];
+    float color[3];
+} __attribute__((packed)) ColoredVertex;
+
+static const ColoredVertex verts[] = {
+    //  X     Y     Z       R     G     B
+    {{-1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}}, /* Background triangle 1 */
+    {{-1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
+    {{ 1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
+    {{-1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}}, /* Background triangle 2 */
+    {{ 1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
+    {{ 1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}},
+    {{-1.0, -1.0,  1.0}, { 1.0,  0.0,  0.0}}, /* Foreground triangle */
+    {{ 0.0,  1.0,  1.0}, { 0.0,  1.0,  0.0}},
+    {{ 1.0, -1.0,  1.0}, { 0.0,  0.0,  1.0}},
+};
+#endif
+
+#define MASK(mask, val) (((val) << (ffs(mask)-1)) & (mask))
+
+/* Main program function */
+static void triangle_main(void) {
+    uint32_t *p;
+    int       i, status;
+    int       width, height;
+    int       start, last, now;
+    int       fps, frames, frames_total;
+
+
+
+
+
+
+
+
+  
+
+
+}
+
+/* Construct a viewport transformation matrix */
+static void matrix_viewport(float out[4][4], float x, float y, float width, float height, float z_min, float z_max)
+{
+    memset(out, 0, 4*4*sizeof(float));
+    out[0][0] = width/2.0f;
+    out[1][1] = height/-2.0f;
+    out[2][2] = z_max - z_min;
+    out[3][3] = 1.0f;
+    out[3][0] = x + width/2.0f;
+    out[3][1] = y + height/2.0f;
+    out[3][2] = z_min;
+}
+
+// We need ou own, as pb_erase_depth_stencil_buffer doesn't support giving a value
+static void erase_depth_stencil_buffer(int x, int y, int w, int h)
+{
+    DWORD       *p;
+
+    int     x1,y1,x2,y2;
+
+    x1=x;
+    y1=y;
+    x2=x+w;
+    y2=y+h;
+    
+    p=pb_begin();
+    pb_push(p++,NV20_TCL_PRIMITIVE_3D_CLEAR_VALUE_HORIZ,2);     //sets rectangle coordinates
+    *(p++)=((x2-1)<<16)|x1;
+    *(p++)=((y2-1)<<16)|y1;
+    pb_push(p++,NV20_TCL_PRIMITIVE_3D_CLEAR_VALUE_DEPTH,3);     //sets data used to fill in rectangle
+    *(p++)=0xffffff00;      //(depth<<8)|stencil
+    *(p++)=0;           //color
+    *(p++)=0x03;            //triggers the HW rectangle fill (only on D&S)
+    pb_end(p);
+}
+
+/* Load the shader we will render with */
+static void init_shader(void)
+{
+    uint32_t *p;
+    int       i;
+
+    /* Setup vertex shader */
+    uint32_t vs_program[] = {
+#include "xbox-hacks/vs.inl"
+    };
+
+    p = pb_begin();
+
+    /* Set run address of shader */
+    pb_push1(p, NV097_SET_TRANSFORM_PROGRAM_START, 0);
+    p += 2;
+
+    /* Set execution mode */
+    pb_push1(p, NV097_SET_TRANSFORM_EXECUTION_MODE,
+        MASK(NV097_SET_TRANSFORM_EXECUTION_MODE_MODE, NV097_SET_TRANSFORM_EXECUTION_MODE_MODE_PROGRAM)
+        | MASK(NV097_SET_TRANSFORM_EXECUTION_MODE_RANGE_MODE, NV097_SET_TRANSFORM_EXECUTION_MODE_RANGE_MODE_PRIV));
+    p += 2;
+
+    pb_push1(p, NV097_SET_TRANSFORM_PROGRAM_CXT_WRITE_EN, 0);
+    p += 2;
+
+    /* Set cursor and begin copying program */
+    pb_push1(p, NV097_SET_TRANSFORM_PROGRAM_LOAD, 0);
+    p += 2;
+
+    for (i=0; i<sizeof(vs_program)/8; i++) {
+        pb_push(p++, NV097_SET_TRANSFORM_PROGRAM, 4);
+        memcpy(p, &vs_program[i*4], 4*4);
+        p+=4;
+    }
+
+    pb_end(p);
+
+    /* Setup fragment shader */
+    p = pb_begin();
+#include "xbox-hacks/ps.inl"
+    pb_end(p);
+}
+
+/* Set an attribute pointer */
+static void set_attrib_pointer(unsigned int index, unsigned int format, unsigned int size, unsigned int stride, const void* data)
+{
+    uint32_t *p = pb_begin();
+    pb_push1(p, NV097_SET_VERTEX_DATA_ARRAY_FORMAT + index*4,
+        MASK(NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE, format) | \
+        MASK(NV097_SET_VERTEX_DATA_ARRAY_FORMAT_SIZE, size) | \
+        MASK(NV097_SET_VERTEX_DATA_ARRAY_FORMAT_STRIDE, stride));
+    p += 2;
+    pb_push1(p, NV097_SET_VERTEX_DATA_ARRAY_OFFSET + index*4, (uint32_t)data & 0x03ffffff);
+    p += 2;
+    pb_end(p);
+}
+
+/* Send draw commands for the triangles */
+static void draw_arrays(unsigned int mode, int start, int count)
+{
+    uint32_t *p = pb_begin();
+    pb_push1(p, NV097_SET_BEGIN_END, mode); p += 2;
+
+    pb_push(p++,0x40000000|NV097_DRAW_ARRAYS,1); //bit 30 means all params go to same register 0x1810
+    *(p++) = MASK(NV097_DRAW_ARRAYS_COUNT, (count-1)) | MASK(NV097_DRAW_ARRAYS_START_INDEX, start);
+
+    pb_push1(p,NV097_SET_BEGIN_END, NV097_SET_BEGIN_END_OP_END); p += 2;
+    pb_end(p);
+}
+
+
+
+
+
+
+
+
+void initialize_screen(void) {
+  static bool initialized = false;
+
+  // Don't initialize twice
+  if (initialized) {
+    return;
+  }
+
+  // Get display resolution
+  VIDEO_MODE vm = XVideoGetMode();
+  SCREEN_WIDTH = vm.width;
+  SCREEN_HEIGHT = vm.height;
+  SCREEN_BPP = vm.bpp;
+
+#ifdef GPU
+  // Set up rendering
+  pb_show_front_screen();
+  int width = pb_back_buffer_width();
+  int height = pb_back_buffer_height();
+  assert(width == SCREEN_WIDTH);
+  assert(height == SCREEN_HEIGHT);
+
+  // Load shaders
+  init_shader();
+
+  // Prepare drawing
+  pb_wait_for_vbl();
+  pb_reset();
+  pb_target_back_buffer();
+#endif
+
+  // Set up input
+  XInput_Init();
+
+  // Move mouse to center
+  mouse_x = SCREEN_WIDTH / 2;
+  mouse_y = SCREEN_HEIGHT / 2;
+
+  // Mark as initialized
+  initialized = true;
+}
 
 
 // unistd.. thanks SDL
 void _exit(int status) {
   exit(status);
 }
+
 
 
 
@@ -108,7 +343,11 @@ static void* array_buffer = NULL;
 extern float clipScale[];
 extern float clipOffset[];
 
+
+#ifndef GPU
 uint8_t buffer[640*480] = {0};
+#endif
+
 
 #define GLAPI // __stdcall
 
@@ -135,8 +374,31 @@ GLAPI void GLAPIENTRY glClearDepth (GLclampd depth) {
 
 GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
   printf("%s\n", __func__);
+
+#ifdef GPU
+
+  /* Clear depth & stencil buffers */
+
+  //FIXME: Check flag
+  erase_depth_stencil_buffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+  //FIXME: Check flag
+  pb_fill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0x00000000); //FIXME: Use proper color
+  pb_erase_text_screen();
+
+  //FIXME: Why?
+  while(pb_busy()) {
+      /* Wait for completion... */
+  }
+
+#else
+
   //FIXME: Clear color?!
   memset(buffer, 0x00, sizeof(buffer));
+  debugClearScreen();
+
+#endif
+
   return;
 }
 
@@ -165,6 +427,8 @@ GLAPI void GLAPIENTRY glDisable (GLenum cap) {
   return;
 }
 
+
+#ifndef GPU
 static void saveBuffer() {
 
   static int t = 0;
@@ -189,10 +453,11 @@ static void saveBuffer() {
   fclose(f);
 
 }
+#endif
 
 static void drawVertex(int i) {
 
-  GLsizei stride = 4 * 4 + 4 + 4 + 1 * 8;
+  GLsizei stride = 4 * 4 + 4 + 4 + 2 * 4;
 
   struct Vertex {
     float x;
@@ -239,12 +504,130 @@ static void drawVertex(int i) {
   //if ((z < 0) || (z > 0xFF)) { return; }
   z = 0xFF;  
 
+#ifdef GPU
+
+  pb_fill(x, y, 1, 1, 0xFF00FFFF); // Cyan
+
+#else
+
+  // Draw to some debug output
   buffer[y * 640 + x] = 0x80 + z / 2;
+
+
+
+  // Draw to actual Xbox framebuffer
+  unsigned char *videoBuffer = XVideoGetFB();
+  videoBuffer += (y * SCREEN_WIDTH + x) * (SCREEN_BPP >> 3);
+
+  switch (SCREEN_BPP) {
+    case 32:
+      *((int*)videoBuffer) = 0xFFFFFFFF;
+      break;
+    case 16:
+      *((short*)videoBuffer) = 0xFFFF;
+      break;
+  }
+
+#endif
+
+}
+
+static void prepare_vertices(void) {
+  uint32_t *p;
+
+#if 1
+  // Be a bit paranoid..
+  //FIXME: Remove if confirmed to not change anything
+  while(pb_busy()) {
+    /* Wait for completion... */
+  }
+  pb_reset();
+#endif
+
+
+ // Setup matrix
+  {
+
+//    float m_viewport[4][4];
+//    matrix_viewport(m_viewport, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 65536.0f);
+
+    /*
+    * WARNING: Changing shader source code may impact constant locations!
+    * Check the intermediate file (*.inl) for the expected locations after
+    * changing the code.
+    */
+    p = pb_begin();
+
+    /* Set shader constants cursor at C0 */
+    pb_push1(p, NV097_SET_TRANSFORM_CONSTANT_LOAD, 96); p+=2;
+
+    /* Send the transformation matrix */
+    float c2[4] = {1, 320, -240, 0};
+    float c3[4] = {320, 240, 65536, 1};
+    pb_push(p++, NV097_SET_TRANSFORM_CONSTANT, 4 * 4);
+    memset(p, 0x00, (4 * 4) *4);
+    memcpy(p, clipScale, 3*4); p+=4; // c0
+    memcpy(p, clipOffset, 3*4); p+=4; // c1
+    memcpy(p, c2, 4*4); p+=4;
+    memcpy(p, c3, 4*4); p+=4;
+
+    pb_end(p);
+  }
+
+
+  p = pb_begin();
+
+#if 1
+  // Set up wireframe mode
+  pb_push2(p,NV20_TCL_PRIMITIVE_3D_POLYGON_MODE_FRONT,0x1B01,0x1B01); p+=3; //FillMode="solid" BackFillMode="point"
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_CULL_FACE_ENABLE,0); p+=2;//CullModeEnable=TRUE
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_DEPTH_TEST_ENABLE,0); p+=2; //ZEnable=TRUE or FALSE (But don't use W, see below)
+#endif
+
+  /* Clear all attributes */
+  pb_push(p++, NV097_SET_VERTEX_DATA_ARRAY_FORMAT,16);
+  for(int i = 0; i < 16; i++) {
+      *(p++) = NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F;
+  }
+
+  pb_end(p);
+
+
+  size_t stride = 4 * 4 + 4 + 4 + 2 * 4;
+  //FIXME: Is this right? our sample doesn't use phys address...
+  uint8_t* buf = MmGetPhysicalAddress(array_buffer);
+
+
+  /* Set vertex position attribute */
+  set_attrib_pointer(0, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F, 4, stride, &buf[0]);
+
+  /* Set vertex diffuse color attribute */
+  set_attrib_pointer(3, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D, 4, stride, &buf[0+4*4]);
+
+  /* Set vertex specular color attribute */
+  set_attrib_pointer(4, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D, 4, stride, &buf[0+4*4+4]);
+
+  /* Set vertex uv0 attribute */
+  set_attrib_pointer(8, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F, 2, stride, &buf[0*4*4+4+4]);
 
 }
 
 GLAPI void GLAPIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
   printf("%s\n", __func__);
+
+#ifdef GPU
+  prepare_vertices();
+
+debugPrint("array {\n");
+  /* Begin drawing triangles */
+  draw_arrays(NV097_SET_BEGIN_END_OP_TRIANGLES, first, count);
+debugPrint("}\n");
+
+#endif
+
+debugPrint("heh.. fuck!\n");
+pb_kill();
+while(1);
 
   for(unsigned int i = 0; i < count; i++) {
     drawVertex(first + i);
@@ -256,8 +639,65 @@ GLAPI void GLAPIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
 GLAPI void GLAPIENTRY glDrawElements (GLenum mode, GLsizei count, GLenum type, const void *indices) {
   printf("%s\n", __func__);
 
+//debugPrint("elements: %d\n", count);
+
+  // Skip empty draws
+  if (count == 0) {
+    return;
+  }
+
+  assert(count <= 2000);
+
+
   assert(type == GL_UNSIGNED_SHORT);
   uint16_t* i16 = (uint16_t*)((uintptr_t)element_array_buffer + (uintptr_t)indices);
+
+  //FIXME: Why doesn't this work?
+#if 1
+  //FIXME: Split into multiple of 60 [divisible by 1, 2, 3, 4, 5] element batches
+  if (count > 60) {
+    glDrawElements(mode, 60, type, indices);
+    glDrawElements(mode, count - 60, type, (uintptr_t)indices + 2*60);
+    return;
+  }
+#endif
+
+
+#ifdef GPU
+  prepare_vertices();
+
+  //FIXME: Make sure this is always the right mode!
+  int gpu_mode = NV097_SET_BEGIN_END_OP_TRIANGLES;
+
+  uint32_t *p = pb_begin();
+
+  pb_push1(p, NV097_SET_BEGIN_END, gpu_mode); p += 2;
+
+  unsigned int pair_count = count / 2;
+  if (pair_count > 0) {
+
+    pb_push(p++,0x40000000|NV097_ARRAY_ELEMENT16, pair_count); //bit 30 means all params go to same register
+
+    for(unsigned int i = 0; i < pair_count; i++) {
+      //FIXME: memcpy instead (endianess?)
+      *(p++) = (i16[2 * i + 1] << 16) | i16[2 * i + 0];
+    }
+  }
+
+  if (count & 1) {
+    pb_push(p++, NV097_ARRAY_ELEMENT32, 1); *p++ = i16[count - 1];
+  }
+
+  pb_push(p++, NV097_SET_BEGIN_END, 1); *p++ = NV097_SET_BEGIN_END_OP_END;
+
+  pb_end(p);
+
+#if 0
+pb_kill();
+while(1);
+#endif
+#endif
+
   for(unsigned int i = 0; i < count; i++) {
     drawVertex(i16[i]);
   }
@@ -365,11 +805,21 @@ GLAPI void GLAPIENTRY _glBindVertexArray(GLuint array) {
 
 GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
   printf("%s\n", __func__);
+
   if (target == GL_ELEMENT_ARRAY_BUFFER) {
+    // Xbox puts element arrays into FIFO, so only accessed by CPU
     element_array_buffer = realloc(element_array_buffer, size);
     memcpy(element_array_buffer, data, size);
   } else if (target == GL_ARRAY_BUFFER) {
-    array_buffer = realloc(array_buffer, size);
+    // Xbox accesses vertices with GPU, so must be non-paged
+
+    //FIXME: Only wait if buffer is in use
+    while(pb_busy()) {
+        /* Wait for completion... */
+    }
+
+    if (array_buffer != NULL) { MmFreeContiguousMemory(array_buffer); }
+    array_buffer = MmAllocateContiguousMemoryEx(size, 0, 0x3ffb000, 0, 0x404);
     memcpy(array_buffer, data, size);
   } else if (target == GL_PIXEL_UNPACK_BUFFER) {
     //FIXME: !!!
@@ -619,11 +1069,77 @@ const Uint8* SDL_GetKeyboardState(int* numkeys) {
   printf("%s\n", __func__);
   static unsigned char keys[256];
   memset(keys, 0x00, sizeof(keys));
+
+  int pad = 0;
+
+  //FIXME: Poll input - This is a hack! because of shitty USB code
+  XInput_GetEvents();
+
+  keys[SDL_SCANCODE_ESCAPE] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_B] >> 7;
+  keys[SDL_SCANCODE_RETURN] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_A] >> 7;
+  keys[SDL_SCANCODE_SPACE] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_X] >> 7;
+  keys[SDL_SCANCODE_UP] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_UP) ? 1 : 0;
+  keys[SDL_SCANCODE_DOWN] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_DOWN) ? 1 : 0;
+  keys[SDL_SCANCODE_LEFT] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_LEFT) ? 1 : 0;
+  keys[SDL_SCANCODE_RIGHT] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_RIGHT) ? 1 : 0;
+  keys[SDL_SCANCODE_Q] |= 0;
+  keys[SDL_SCANCODE_W] |= 0;
+  keys[SDL_SCANCODE_E] |= 0;
+  keys[SDL_SCANCODE_R] |= 0;
+  keys[SDL_SCANCODE_I] |= 0;
+  keys[SDL_SCANCODE_A] |= 0;
+  keys[SDL_SCANCODE_S] |= 0;
+  keys[SDL_SCANCODE_D] |= 0;
+  keys[SDL_SCANCODE_F] |= 0;
+  keys[SDL_SCANCODE_J] |= 0;
+  keys[SDL_SCANCODE_K] |= 0;
+  keys[SDL_SCANCODE_L] |= 0;
+  keys[SDL_SCANCODE_M] |= 0;
+  keys[SDL_SCANCODE_F1] |= 0;
+  keys[SDL_SCANCODE_F2] |= 0;
+  keys[SDL_SCANCODE_F3] |= 0;
+  keys[SDL_SCANCODE_F4] |= 0;
+  keys[SDL_SCANCODE_F5] |= 0;
+  keys[SDL_SCANCODE_F6] |= 0;
+  keys[SDL_SCANCODE_F7] |= 0;
+  keys[SDL_SCANCODE_F12] |= 0;
+  keys[SDL_SCANCODE_GRAVE] |= 0;
+  keys[SDL_SCANCODE_EQUALS] |= 0;
+  keys[SDL_SCANCODE_MINUS] |= 0;
+  keys[SDL_SCANCODE_TAB] |= 0;
+  keys[SDL_SCANCODE_CAPSLOCK] |= 0;
+  keys[SDL_SCANCODE_LSHIFT] |= 0;
+  keys[SDL_SCANCODE_RSHIFT] |= 0;
+  keys[SDL_SCANCODE_LCTRL] |= 0;
+  keys[SDL_SCANCODE_RCTRL] |= 0;
+  keys[SDL_SCANCODE_LALT] |= 0;
+  keys[SDL_SCANCODE_RALT] |= 0;
+
   return keys;
 }
 
 Uint32 SDL_GetMouseState(int* x, int* y) {
   printf("%s\n", __func__);
+
+  //FIXME: Consider time as aspect and use
+  //mouse_x += dx * dt;
+  //mouse_y += dy * dt;
+
+  //FIXME: Poll input - This is a hack! because of shitty USB code
+  XInput_GetEvents();
+
+  //FIXME: This is just a dirty hack.. remove
+  mouse_x = SCREEN_WIDTH / 2 + g_Pads[pad].sRThumbX / 64;
+  mouse_y = -40 + SCREEN_HEIGHT / 2 - g_Pads[pad].sRThumbY / 64; // Hack to pre-select single player
+
+  if (mouse_x < 0) { mouse_x = 0; }
+  if (mouse_y < 0) { mouse_y = 0; }
+  if (mouse_x > SCREEN_WIDTH) { mouse_x = SCREEN_WIDTH; }
+  if (mouse_y > SCREEN_HEIGHT) { mouse_y = SCREEN_HEIGHT; }
+
+  *x = mouse_x;
+  *y = mouse_y;
+
   return 0;
 }
 
@@ -656,7 +1172,49 @@ int SDL_GL_SetAttribute(SDL_GLattr attr, int        value) {
 void SDL_GL_SwapWindow(SDL_Window* window) {
   printf("%s\n", __func__);
 
-  saveBuffer();
+#ifdef GPU
+
+  //FIXME: Poll input - This is a hack! because of shitty USB code
+  XInput_GetEvents();
+
+  // Draw some text on the screen
+  pb_print("OpenSWE1R\n");
+  extern uint32_t callId;
+  pb_print("Call: %u\n", callId);
+  pb_print("Mouse: %u %u\n", mouse_x, mouse_y);
+  pb_print("Pad: %d %d\n", g_Pads[pad].sRThumbX, g_Pads[pad].sRThumbY);
+
+  pb_draw_text_screen();
+
+
+  // Finish current frame
+  
+  while(pb_busy()) {
+      /* Wait for completion... */
+  }
+
+  /* Swap buffers (if we can) */
+  while (pb_finished()) {
+      /* Not ready to swap yet */
+  }
+
+
+
+
+
+  // Prepare for next frame
+
+  pb_wait_for_vbl();
+  pb_reset();
+  pb_target_back_buffer();
+
+#else
+
+  // Already done during draw: single buffered
+
+#endif
+
+  //saveBuffer();
 
   return;
 }

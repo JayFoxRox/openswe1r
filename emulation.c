@@ -739,7 +739,7 @@ static unsigned int GetThreadCount() {
 }
 
 static void memory_statistics() {
-#ifdef XBOX
+#if 0 //#ifdef XBOX
   debugPrint("           Memory statistics:\n");
   MM_STATISTICS ms;
   ms.Length = sizeof(MM_STATISTICS);
@@ -818,7 +818,9 @@ void RunEmulation() {
 
       HltHandler* hltHandler = findHltHandler(hltAddress);
       if(hltHandler != NULL) {
+#ifndef XBOX
         printf("Running handler for '%s'\n",  hltHandler->user_data);
+#endif
         hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
       } else {
         assert(false);

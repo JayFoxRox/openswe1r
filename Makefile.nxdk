@@ -1,4 +1,4 @@
-//NXDK_SDL = y
+#NXDK_SDL = y
 
 XBE_TITLE = OpenSWE1R
 GEN_XISO = $(XBE_TITLE).iso
@@ -31,9 +31,15 @@ CFLAGS += -I$(SDL_DIR)/include
 
 CFLAGS += -Wno-inconsistent-dllimport
 
+#FIXME: Slow mode for pbkit! remove!
+CFLAGS += -DGPU=1
+CFLAGS += -DDBG=1
+
 # We are short on memory, so reduce binary footprint
-CFLAGS += -Os
+#CFLAGS += -Os
 #FIXME: At least one of these is bad: -fno-stack-protector -fomit-frame-pointer -ffunction-sections -fdata-sections
-NXDK_STACKSIZE=16384
+#NXDK_STACKSIZE=16384
+
+SHADER_OBJS = xbox-hacks/ps.inl xbox-hacks/vs.inl
 
 include $(NXDK_DIR)/Makefile

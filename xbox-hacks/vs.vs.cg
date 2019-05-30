@@ -1,0 +1,37 @@
+struct vIn {
+  float4 position : POSITION;
+  float4 diffuse  : DIFFUSE;
+  float4 specular : SPECULAR;
+  float2 uv0      : TEXCOORD;
+};
+
+struct vOut {
+  float4 position : POSITION;
+  float4 diffuse  : COLOR0;
+  float4 specular : COLOR1;
+  float2 uv0      : TEXCOORD0;
+};
+
+vOut main(
+  vIn              I,
+  uniform float3 clipScale,
+  uniform float3 clipOffset
+  )
+{
+  vOut   result;
+  float4 position;
+
+  position = float4(I.position.xyz * clipScale + clipOffset, 1.0);
+  position /= I.position.w;
+  position.y = -position.y;
+
+  // Transfom for Xbox framebuffer
+  position = (position / position.w) * float4(320.0, -240.0, 0.0, 0.0) + float4(320.0, 240.0, 65536.0, 1.0);
+  position.xyz /= position.w;
+
+  result.position = position;
+  result.diffuse = I.diffuse;
+  result.specular = I.specular;
+  result.uv0 = I.uv0;
+  return result;
+}

@@ -36,15 +36,15 @@
 //FIXME: REMOVE THIS BLOCK! Only used during development
 #ifdef XBOX
 #include <xboxrt/debug.h>
-#define debugPrint(fmt, ...) \
+#define XboxHackyDebugPrint(fmt, ...) \
   do { \
     char buf[4096]; \
     sprintf(buf, fmt, __VA_ARGS__); \
     printf("%s", buf); \
-    debugPrint("%s", buf); \
+    /*debugPrint("%s", buf);*/ \
   } while(0);
 #else
-#define debugPrint(fmt, ...)
+#define XboxHackyDebugPrint(fmt, ...)
 #endif
 #ifdef XBOX
 #include <pbkit/pbkit.h>
@@ -134,7 +134,7 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
   assert(vtableAddress != 0);
 
 #if 1
-debugPrint("FOO B\n");
+XboxHackyDebugPrint("FOO B\n");
   static Address IDirectDrawSurface4 = 0;
   static Address IDirect3DTexture2 = 0;
   if (!strcmp(name, "IDirectDrawSurface4")) {
@@ -155,7 +155,7 @@ debugPrint("FOO B\n");
     }
   }
   assert(vtableAddress != 0);
-debugPrint("FOO E\n");
+XboxHackyDebugPrint("FOO E\n");
 #endif
 
   char* slotNames = Memory(vtableAddress + 4 * slotCount);
@@ -4340,11 +4340,19 @@ __attribute__((constructor(102))) static void start_log() {
 int main(int argc, char* argv[]) {
 #ifdef XBOX
 
+  // Set display mode (16bpp to save memory)
+  //FIXME: Temporarily switched to 32bpp, as I got weird issues at 16bpp
   XVideoSetMode(640, 480, 32, REFRESH_DEFAULT); 
-
+  
+  // Startup pbkit
   pb_init();
-
+#ifdef GPU
+  pb_show_front_screen();
+#else
   pb_show_debug_screen();
+#endif
+
+  initialize_screen();
 #else
   //dup2(stdout, stderr);
   setbuf(stdout, 0);

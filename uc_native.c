@@ -311,10 +311,6 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
 
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
   uc_engine_native* u = (uc_engine_native*)uc;
-  printf("uc_emu_start\n");
-
-  extern uint32_t callId;
-  printf("Doing some bullshit %d at 0x%08X\n", callId, begin);
 
   _begin = begin;
 

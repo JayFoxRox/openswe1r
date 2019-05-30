@@ -15,13 +15,12 @@ extern uint32_t callId;
 
 extern Address clearEax;
 
-static inline int hacky_printf(const char* fmt, ...) {
-#if 1
+static inline void hacky_printf(const char* fmt, ...) {
+#if 0
   va_list args;
   va_start(args, fmt);
   int ret = vprintf(fmt, args);
   va_end(args);
-  return ret;
 #endif
 }
 
@@ -80,17 +79,12 @@ void AddExport(const char* name, void* callback, Address address);
     /* Pop the return address */ \
     Address returnAddress = stack[0]; \
     eip = returnAddress; \
-    esp += 4; \
-
-#ifndef XBOX
-#define debugPrint(fmt, ...) (0)
-#endif
+    esp += 4;
 
 #define HACKY_IMPORT_END() \
     if (!silent) { \
       hacky_printf("Stack at 0x%" PRIX32 "; returning EAX: 0x%08" PRIX32 "\n", stackAddress, eax); \
       hacky_printf("%" PRIu32 " Emulation at %X ('%s') from %X\n\n", callId, eip, (char*)_user_data, returnAddress); \
-      debugPrint("%u\n", callId); \
     } \
     callId++; \
     \
