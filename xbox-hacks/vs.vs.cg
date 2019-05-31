@@ -15,7 +15,8 @@ struct vOut {
 vOut main(
   vIn              I,
   uniform float3 clipScale,
-  uniform float3 clipOffset
+  uniform float3 clipOffset,
+  uniform float2 tex0Scale
   )
 {
   vOut   result;
@@ -32,6 +33,6 @@ vOut main(
   result.position = position;
   result.diffuse = I.diffuse;
   result.specular = I.specular;
-  result.uv0 = I.uv0;
+  result.uv0 = I.uv0 * tex0Scale;
   return result;
 }

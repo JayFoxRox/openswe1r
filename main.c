@@ -2550,7 +2550,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   API(DDSURFACEDESC2)* desc = Memory(stack[3]);
   memcpy(desc, &this->desc, sizeof(API(DDSURFACEDESC2)));
   
+#if 0
   printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
+#endif
 #if 0
   desc->dwWidth = 16;
   desc->dwHeight = 16;
@@ -3195,11 +3197,13 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 25)
       //FIXME: assert(false) once this runs faster
       break;
   }
+#if 0
   printf("Matrix %d:\n", a);
   printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
   printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
   printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
   printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
+#endif
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -3595,7 +3599,9 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   UpdateKeyboardState();
   uint32_t* count = (uint32_t*)Memory(stack[4]);
   unsigned int max_count = *count;
+#if 0
   printf("max count is %d\n", max_count);
+#endif
   *count = 0;
   unsigned int objectSize = stack[2];
   assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
@@ -3613,7 +3619,9 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
     }
   }
   memcpy(previousState, keyboardState, sizeof(keyboardState));
+#if 0
   printf("returning %d entries\n", *count);
+#endif
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;

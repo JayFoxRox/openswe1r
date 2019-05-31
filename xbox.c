@@ -4,6 +4,20 @@
 // Some of these will likely be stubbed / disabled in OpenSWE1R.
 // However, it's currently not known which parts exactly; so this is a hack.
 
+
+
+
+// Some hacks..
+//#define DUMP_TEXTURE
+#define SAME_TEXTURE // Without this, Xbox will run out of memory
+#define USE_TEXTURES
+#define MARK_VERTICES
+//#define LOG
+
+
+
+
+
 #include <stdio.h>
 
 #include <stddef.h>
@@ -34,7 +48,9 @@ static const int pad = 0;
 static int mouse_x = 0;
 static int mouse_y = 0;
 
+#ifndef LOG
 #define printf(fmt, ...)  {}
+#endif
 
 
 
@@ -61,60 +77,8 @@ static int mouse_y = 0;
 #include <xboxrt/debug.h>
 #endif
 
-#if 0
-typedef struct {
-    float pos[3];
-    float color[3];
-} __attribute__((packed)) ColoredVertex;
-
-static const ColoredVertex verts[] = {
-    //  X     Y     Z       R     G     B
-    {{-1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}}, /* Background triangle 1 */
-    {{-1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
-    {{ 1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
-    {{-1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}}, /* Background triangle 2 */
-    {{ 1.0,  1.0,  1.0}, { 0.0,  0.0,  0.0}},
-    {{ 1.0, -1.0,  1.0}, { 0.1,  0.1,  0.6}},
-    {{-1.0, -1.0,  1.0}, { 1.0,  0.0,  0.0}}, /* Foreground triangle */
-    {{ 0.0,  1.0,  1.0}, { 0.0,  1.0,  0.0}},
-    {{ 1.0, -1.0,  1.0}, { 0.0,  0.0,  1.0}},
-};
-#endif
 
 #define MASK(mask, val) (((val) << (ffs(mask)-1)) & (mask))
-
-/* Main program function */
-static void triangle_main(void) {
-    uint32_t *p;
-    int       i, status;
-    int       width, height;
-    int       start, last, now;
-    int       fps, frames, frames_total;
-
-
-
-
-
-
-
-
-  
-
-
-}
-
-/* Construct a viewport transformation matrix */
-static void matrix_viewport(float out[4][4], float x, float y, float width, float height, float z_min, float z_max)
-{
-    memset(out, 0, 4*4*sizeof(float));
-    out[0][0] = width/2.0f;
-    out[1][1] = height/-2.0f;
-    out[2][2] = z_max - z_min;
-    out[3][3] = 1.0f;
-    out[3][0] = x + width/2.0f;
-    out[3][1] = y + height/2.0f;
-    out[3][2] = z_min;
-}
 
 // We need ou own, as pb_erase_depth_stencil_buffer doesn't support giving a value
 static void erase_depth_stencil_buffer(int x, int y, int w, int h)
@@ -127,16 +91,23 @@ static void erase_depth_stencil_buffer(int x, int y, int w, int h)
     y1=y;
     x2=x+w;
     y2=y+h;
-    
+    printf("zclear{");
     p=pb_begin();
     pb_push(p++,NV20_TCL_PRIMITIVE_3D_CLEAR_VALUE_HORIZ,2);     //sets rectangle coordinates
     *(p++)=((x2-1)<<16)|x1;
     *(p++)=((y2-1)<<16)|y1;
     pb_push(p++,NV20_TCL_PRIMITIVE_3D_CLEAR_VALUE_DEPTH,3);     //sets data used to fill in rectangle
-    *(p++)=0xffffff00;      //(depth<<8)|stencil
-    *(p++)=0;           //color
-    *(p++)=0x03;            //triggers the HW rectangle fill (only on D&S)
+    if (SCREEN_BPP == 32) {
+      *(p++)=0xffffff00;      //(depth<<8)|stencil
+      *(p++)=0;           //color
+      *(p++)=0x03;            //triggers the HW rectangle fill (only on D&S)
+    } else {
+      *(p++)=0xffff;      //depth
+      *(p++)=0;           //color
+      *(p++)=0x01;            //triggers the HW rectangle fill (only on D&S)
+    }
     pb_end(p);
+    printf("}");
 }
 
 /* Load the shader we will render with */
@@ -339,6 +310,9 @@ int alSourceStop(int a0) {
 
 static void* element_array_buffer = NULL;
 static void* array_buffer = NULL;
+#ifdef USE_TEXTURES
+static void** pixel_unpack_buffer = NULL;
+#endif
 
 extern float clipScale[];
 extern float clipOffset[];
@@ -351,9 +325,28 @@ uint8_t buffer[640*480] = {0};
 
 #define GLAPI // __stdcall
 
+#ifdef USE_TEXTURES
+typedef struct {
+  GLenum type;
+  void** pbo;
+  unsigned int width;
+  unsigned int height;
+} Texture;
+
+static Texture* texture_2d = NULL;
+#endif
 
 GLAPI void GLAPIENTRY glBindTexture (GLenum target, GLuint texture) {
   printf("%s\n", __func__);
+
+  assert(target == GL_TEXTURE_2D);
+
+#ifdef USE_TEXTURES
+  texture_2d = texture;
+
+  printf("TEX Binding %p\n", texture);
+#endif
+
   return;
 }
 
@@ -383,8 +376,7 @@ GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
   erase_depth_stencil_buffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
   //FIXME: Check flag
-  pb_fill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0x00000000); //FIXME: Use proper color
-  pb_erase_text_screen();
+  pb_fill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff202020); //FIXME: Use proper color
 
   //FIXME: Why?
   while(pb_busy()) {
@@ -455,6 +447,7 @@ static void saveBuffer() {
 }
 #endif
 
+#ifdef MARK_VERTICES
 static void drawVertex(int i) {
 
   GLsizei stride = 4 * 4 + 4 + 4 + 2 * 4;
@@ -531,19 +524,135 @@ static void drawVertex(int i) {
 #endif
 
 }
+#endif
 
+#ifdef GPU
 static void prepare_vertices(void) {
   uint32_t *p;
 
 #if 1
   // Be a bit paranoid..
-  //FIXME: Remove if confirmed to not change anything
+  //FIXME: Need to handle ringbuffer in pbkit..
   while(pb_busy()) {
     /* Wait for completion... */
   }
   pb_reset();
 #endif
 
+
+#ifdef USE_TEXTURES
+
+#if 0
+  Texture t;
+  t.width = 32;
+  t.height = 32;
+  t.type = GL_UNSIGNED_BYTE;
+  static uint32_t* xxx = NULL;
+  if (xxx == NULL) {
+    xxx = MmAllocateContiguousMemoryEx(t.width * t.height * 4, 0, 0x3ffb000, 0, 0x404);
+    for(int y = 0; y < t.height; y++) {
+      for(int x = 0; x < t.width; x++) {
+        xxx[y * t.width + x] = ((x + (y & 8)) & 8) ? 0xFFFFFFFF : 0xFF0000FF;
+      }
+    }
+  }
+  void* pbo = xxx;
+  t.pbo = &pbo;
+  texture_2d = &t;
+#endif
+
+#if 1
+  /* Enable texture stage 0 */
+  if (texture_2d != NULL) {
+
+    void** pbo = texture_2d->pbo;
+    uintptr_t pixels = *pbo;
+    unsigned int width = texture_2d->width;
+    unsigned int height = texture_2d->height;
+
+    uint32_t fmt = 0;
+    unsigned int pitch = 0;
+    switch(texture_2d->type) {
+    case GL_UNSIGNED_BYTE: {
+      fmt = NV097_SET_TEXTURE_FORMAT_COLOR_LU_IMAGE_B8G8R8A8;
+      pitch = width * 4;
+#ifdef DUMP_TEXTURE
+      FILE* f = fopen("rgba8888.bin", "wb");
+      fwrite(pixels, pitch * height, 1, f);
+      fclose(f);
+#endif
+      break;
+    }
+    case GL_UNSIGNED_SHORT_1_5_5_5_REV: {
+#define NV097_SET_TEXTURE_FORMAT_COLOR_LU_IMAGE_R5G5B5A1 0x3D
+      fmt = NV097_SET_TEXTURE_FORMAT_COLOR_LU_IMAGE_R5G5B5A1;
+      pitch = width * 2;
+#ifdef DUMP_TEXTURE
+      FILE* f = fopen("rgba5551.bin", "wb");
+      fwrite(pixels, pitch * height, 1, f);
+      fclose(f);
+#endif
+      break;
+    }
+    case GL_UNSIGNED_SHORT_4_4_4_4_REV: {
+      fmt = NV097_SET_TEXTURE_FORMAT_COLOR_LU_IMAGE_A4R4G4B4;
+      pitch = width * 2;
+#ifdef DUMP_TEXTURE
+      FILE* f = fopen("rgba4444.bin", "wb");
+      fwrite(pixels, pitch * height, 1, f);
+      fclose(f);
+#endif
+      break;
+    }
+    default:
+      assert(false);
+      break;
+    }
+
+    printf("%s done\n", __func__);
+
+    p=pb_begin();
+    pb_push2(p,NV20_TCL_PRIMITIVE_3D_TX_OFFSET(0),(DWORD)(MmGetPhysicalAddress(pixels) & 0x03ffffff), (0x0001002a | (fmt << 8))); p+=3; //set stage 0 texture address & format
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_NPOT_PITCH(0),pitch<<16); p+=2; //set stage 0 texture pitch (pitch<<16)
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_NPOT_SIZE(0),(width<<16)|height); p+=2; //set stage 0 texture width & height ((witdh<<16)|height)
+    //pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_WRAP(0),0x00010101); p+=2;//set stage 0 texture modes (0x0W0V0U wrapping: 1=wrap 2=mirror 3=clamp 4=border 5=clamp to edge)
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_ENABLE(0),0x4003ffc0); p+=2; //set stage 0 texture enable flags
+    //pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_FILTER(0),0x04074000); p+=2; //set stage 0 texture filters (AA!)
+    pb_end(p);
+
+    printf("TEX Activated %p: %u x %u (pitch: %u), PBO: %p pixels: %p / %p\n", texture_2d, width, height, pitch, pbo, pixels, (void*)MmGetPhysicalAddress(pixels));
+
+  } else {
+
+    p=pb_begin();
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_ENABLE(0),0x0003ffc0); p+=2;//set stage 0 texture enable flags (bit30 disabled)
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_WRAP(0),0x00030303); p+=2;//set stage 0 texture modes (0x0W0V0U wrapping: 1=wrap 2=mirror 3=clamp 4=border 5=clamp to edge)
+    pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_FILTER(0),0x02022000); p+=2;//set stage 0 texture filters (no AA, stage not even used)
+    pb_end(p);
+
+    printf("TEX Deactivated\n");
+
+  }
+#endif
+
+  // Disable other texture stages
+
+  p=pb_begin();
+
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_ENABLE(1),0x0003ffc0); p+=2;//set stage 1 texture enable flags (bit30 disabled)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_WRAP(1),0x00030303); p+=2;//set stage 1 texture modes (0x0W0V0U wrapping: 1=wrap 2=mirror 3=clamp 4=border 5=clamp to edge)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_FILTER(1),0x02022000); p+=2;//set stage 1 texture filters (no AA, stage not even used)
+
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_ENABLE(2),0x0003ffc0); p+=2;//set stage 2 texture enable flags (bit30 disabled)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_WRAP(2),0x00030303); p+=2;//set stage 2 texture modes (0x0W0V0U wrapping: 1=wrap 2=mirror 3=clamp 4=border 5=clamp to edge)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_FILTER(2),0x02022000); p+=2;//set stage 2 texture filters (no AA, stage not even used)
+
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_ENABLE(3),0x0003ffc0); p+=2;//set stage 3 texture enable flags (bit30 disabled)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_WRAP(3),0x00030303); p+=2;//set stage 3 texture modes (0x0W0V0U wrapping: 1=wrap 2=mirror 3=clamp 4=border 5=clamp to edge)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_TX_FILTER(3),0x02022000); p+=2;//set stage 3 texture filters (no AA, stage not even used)
+
+  pb_end(p);
+#endif
 
  // Setup matrix
   {
@@ -562,14 +671,20 @@ static void prepare_vertices(void) {
     pb_push1(p, NV097_SET_TRANSFORM_CONSTANT_LOAD, 96); p+=2;
 
     /* Send the transformation matrix */
-    float c2[4] = {1, 320, -240, 0};
-    float c3[4] = {320, 240, 65536, 1};
-    pb_push(p++, NV097_SET_TRANSFORM_CONSTANT, 4 * 4);
+#ifdef USE_TEXTURES
+    float tex0Scale[4] = { texture_2d->width, texture_2d->height, 0, 0 };
+#else
+    float tex0Scale[4] = { 1, 1, 0, 0 };
+#endif
+    float c3[4] = {1, 320, -240, 0};
+    float c4[4] = {320, 240, 65536, 1};
+    pb_push(p++, NV097_SET_TRANSFORM_CONSTANT, 5 * 4);
     memset(p, 0x00, (4 * 4) *4);
     memcpy(p, clipScale, 3*4); p+=4; // c0
     memcpy(p, clipOffset, 3*4); p+=4; // c1
-    memcpy(p, c2, 4*4); p+=4;
-    memcpy(p, c3, 4*4); p+=4;
+    memcpy(p, tex0Scale, 4*4); p+=4; // c2
+    memcpy(p, c3, 4*4); p+=4; // c3
+    memcpy(p, c4, 4*4); p+=4; // c4
 
     pb_end(p);
   }
@@ -578,10 +693,14 @@ static void prepare_vertices(void) {
   p = pb_begin();
 
 #if 1
-  // Set up wireframe mode
-  pb_push2(p,NV20_TCL_PRIMITIVE_3D_POLYGON_MODE_FRONT,0x1B01,0x1B01); p+=3; //FillMode="solid" BackFillMode="point"
+  //FIXME: Debug hack to set up wireframe mode
+  unsigned int fill_mode = (g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_WHITE] > 0x20) ? 0x1B01 : 0x1B02;
+
+  pb_push2(p,NV20_TCL_PRIMITIVE_3D_POLYGON_MODE_FRONT,fill_mode,fill_mode); p+=3; //FillMode="solid" BackFillMode="point"
+
+
   pb_push1(p,NV20_TCL_PRIMITIVE_3D_CULL_FACE_ENABLE,0); p+=2;//CullModeEnable=TRUE
-  pb_push1(p,NV20_TCL_PRIMITIVE_3D_DEPTH_TEST_ENABLE,0); p+=2; //ZEnable=TRUE or FALSE (But don't use W, see below)
+  pb_push1(p,NV20_TCL_PRIMITIVE_3D_DEPTH_TEST_ENABLE,0); p+=2; //ZEnable=TRUE or FALSE (But don't use W)
 #endif
 
   /* Clear all attributes */
@@ -595,7 +714,7 @@ static void prepare_vertices(void) {
 
   size_t stride = 4 * 4 + 4 + 4 + 2 * 4;
   //FIXME: Is this right? our sample doesn't use phys address...
-  uint8_t* buf = MmGetPhysicalAddress(array_buffer);
+  uint8_t* buf = MmGetPhysicalAddress(array_buffer); //FIXME: & 0x03ffffff ?
 
 
   /* Set vertex position attribute */
@@ -608,9 +727,10 @@ static void prepare_vertices(void) {
   set_attrib_pointer(4, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_UB_D3D, 4, stride, &buf[0+4*4+4]);
 
   /* Set vertex uv0 attribute */
-  set_attrib_pointer(8, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F, 2, stride, &buf[0*4*4+4+4]);
+  set_attrib_pointer(8, NV097_SET_VERTEX_DATA_ARRAY_FORMAT_TYPE_F, 2, stride, &buf[0+4*4+4+4]);
 
 }
+#endif
 
 GLAPI void GLAPIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
   printf("%s\n", __func__);
@@ -629,9 +749,11 @@ debugPrint("heh.. fuck!\n");
 pb_kill();
 while(1);
 
+#ifdef MARK_VERTICES
   for(unsigned int i = 0; i < count; i++) {
     drawVertex(first + i);
   }
+#endif
 
   return;
 }
@@ -652,22 +774,36 @@ GLAPI void GLAPIENTRY glDrawElements (GLenum mode, GLsizei count, GLenum type, c
   assert(type == GL_UNSIGNED_SHORT);
   uint16_t* i16 = (uint16_t*)((uintptr_t)element_array_buffer + (uintptr_t)indices);
 
-  //FIXME: Why doesn't this work?
+#ifdef GPU
+
+  //FIXME: Why doesn't this work? still only draws some of them
 #if 1
   //FIXME: Split into multiple of 60 [divisible by 1, 2, 3, 4, 5] element batches
-  if (count > 60) {
-    glDrawElements(mode, 60, type, indices);
-    glDrawElements(mode, count - 60, type, (uintptr_t)indices + 2*60);
+  unsigned int batch = 60;
+  if (count > batch) {
+    printf("...batch: %d\n", count);
+
+    //FIXME: Debug hack to only draw last vertices
+    if (!(g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_BLACK] > 0x20)) {
+      glDrawElements(mode, batch, type, indices);
+    }
+
+    glDrawElements(mode, count - batch, type, ((uintptr_t)indices) + 2*batch);
     return;
   }
 #endif
 
 
-#ifdef GPU
   prepare_vertices();
 
   //FIXME: Make sure this is always the right mode!
-  int gpu_mode = NV097_SET_BEGIN_END_OP_TRIANGLES;
+  int gpu_mode = 0;
+  if (mode == GL_TRIANGLES) {
+    gpu_mode = NV097_SET_BEGIN_END_OP_TRIANGLES;
+  } else {
+    printf("Oops! mode %d\n", mode);
+    assert(false);
+  }
 
   uint32_t *p = pb_begin();
 
@@ -698,9 +834,11 @@ while(1);
 #endif
 #endif
 
+#ifdef MARK_VERTICES
   for(unsigned int i = 0; i < count; i++) {
     drawVertex(i16[i]);
   }
+#endif
 
   return;
 }
@@ -712,6 +850,19 @@ GLAPI void GLAPIENTRY glEnable (GLenum cap) {
 
 GLAPI void GLAPIENTRY glGenTextures (GLsizei n, GLuint *textures) {
   printf("%s\n", __func__);
+
+  assert(n == 1);
+
+#ifdef USE_TEXTURES
+  
+  Texture* texture = malloc(sizeof(Texture));
+  memset(texture, 0x00, sizeof(Texture));
+
+  textures[0] = texture;
+
+  printf("TEX Created %p\n", texture);
+#endif
+
   return;
 }
 
@@ -733,36 +884,24 @@ GLAPI void GLAPIENTRY glScissor (GLint x, GLint y, GLsizei width, GLsizei height
 GLAPI void GLAPIENTRY glTexImage2D (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void *pixels) {
   printf("%s\n", __func__);
 
-  //FIXME: Add support for PBOs
-  if (pixels == NULL) {
-    return;
-  }
+  assert(target == GL_TEXTURE_2D);
 
-  switch(type) {
-  case GL_UNSIGNED_BYTE: {
-    FILE* f = fopen("rgba8888.bin", "wb");
-    fwrite(pixels, width * height * 4, 1, f);
-    fclose(f);
-    break;
-  }
-  case GL_UNSIGNED_SHORT_1_5_5_5_REV: {
-    FILE* f = fopen("rgba5551.bin", "wb");
-    fwrite(pixels, width * height * 2, 1, f);
-    fclose(f);
-    break;
-  }
-  case GL_UNSIGNED_SHORT_4_4_4_4_REV: {
-    FILE* f = fopen("rgba4444.bin", "wb");
-    fwrite(pixels, width * height * 2, 1, f);
-    fclose(f);
-    break;
-  }
-  default:
-    assert(false);
-    break;
-  }
+#ifdef USE_TEXTURES
+  assert(texture_2d != NULL); // Texture should be set
 
-  printf("%s done\n", __func__);
+  assert(pixel_unpack_buffer != NULL); // PBO should be set
+  assert(*pixel_unpack_buffer != NULL); // PBO should contain data
+
+  assert(pixels == NULL); // PBO data should always be at base
+
+  // Point texture at PBO, so we can find the data
+  texture_2d->pbo = pixel_unpack_buffer;
+  texture_2d->type = type; // Keep track of type
+  texture_2d->width = width;
+  texture_2d->height = height;
+
+  printf("TEX Image %p %d x %d, type: %d, PBO: %p\n", texture_2d, width, height, type, pixel_unpack_buffer);
+#endif
 
   return;
 }
@@ -795,6 +934,13 @@ GLAPI void GLAPIENTRY _glAttachShader(GLuint program, GLuint shader) {
 
 GLAPI void GLAPIENTRY _glBindBuffer(GLenum target, GLuint buffer) {
   printf("%s\n", __func__);
+
+#ifdef USE_TEXTURES
+  if (target == GL_PIXEL_UNPACK_BUFFER) {
+    pixel_unpack_buffer = buffer;
+  }
+#endif
+
   return;
 }
 
@@ -822,7 +968,25 @@ GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* 
     array_buffer = MmAllocateContiguousMemoryEx(size, 0, 0x3ffb000, 0, 0x404);
     memcpy(array_buffer, data, size);
   } else if (target == GL_PIXEL_UNPACK_BUFFER) {
-    //FIXME: !!!
+#ifdef USE_TEXTURES
+    assert(pixel_unpack_buffer != NULL); // PBO must be bound
+
+#ifdef SAME_TEXTURE
+    static void* large_pbo = NULL;
+    {
+      size_t fake_size = 640*480*4;
+      assert(size <= fake_size);
+      if (large_pbo == NULL) {
+        large_pbo = MmAllocateContiguousMemoryEx(fake_size, 0, 0x3ffb000, 0, 0x404);
+      }
+    }
+    *pixel_unpack_buffer = large_pbo;
+#else
+    *pixel_unpack_buffer = MmAllocateContiguousMemoryEx(size, 0, 0x3ffb000, 0, 0x404);
+    if (*pixel_unpack_buffer != NULL) { MmFreeContiguousMemory(*pixel_unpack_buffer); }
+#endif
+    memcpy(*pixel_unpack_buffer, data, size);
+#endif
   } else {
     assert(false);
   }
@@ -859,8 +1023,18 @@ GLAPI void GLAPIENTRY _glEnableVertexAttribArray(GLuint index) {
   return;
 }
 
-GLAPI void GLAPIENTRY _glGenBuffers(int a0, unsigned int* a1) {
+GLAPI void GLAPIENTRY _glGenBuffers(GLsizei n, GLuint * buffers) {
+
   printf("%s\n", __func__);
+
+  assert(n == 1);
+
+  // Allocate a pointer to buffer
+  void** ptr = malloc(sizeof(void*));
+  *ptr = NULL;
+
+  buffers[0] = ptr;
+
   return;
 }
 
@@ -876,11 +1050,25 @@ GLAPI GLint GLAPIENTRY _glGetAttribLocation(GLuint program, const GLchar *name) 
 
 GLAPI void * GLAPIENTRY _glMapBuffer(GLenum target, GLenum access) {
   printf("%s\n", __func__);
-  return 0;
+
+  assert(target == GL_PIXEL_UNPACK_BUFFER);
+
+#ifdef USE_TEXTURES
+
+  assert(pixel_unpack_buffer != NULL); // PBO should be set
+  assert(*pixel_unpack_buffer != NULL); // PBO should contain data
+
+  return *pixel_unpack_buffer;
+#else
+  return NULL;
+#endif
 }
 
 GLAPI GLboolean GLAPIENTRY _glUnmapBuffer(GLenum target) {
   printf("%s\n", __func__);
+
+  assert(target == GL_PIXEL_UNPACK_BUFFER);
+
   return 0;
 }
 
@@ -1075,9 +1263,9 @@ const Uint8* SDL_GetKeyboardState(int* numkeys) {
   //FIXME: Poll input - This is a hack! because of shitty USB code
   XInput_GetEvents();
 
-  keys[SDL_SCANCODE_ESCAPE] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_B] >> 7;
-  keys[SDL_SCANCODE_RETURN] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_A] >> 7;
-  keys[SDL_SCANCODE_SPACE] |= g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_X] >> 7;
+  keys[SDL_SCANCODE_ESCAPE] |= (g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_B] > 0x20)? 1 : 0;
+  keys[SDL_SCANCODE_RETURN] |= (g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_A] > 0x20)? 1 : 0;
+  keys[SDL_SCANCODE_SPACE] |= (g_Pads[pad].CurrentButtons.ucAnalogButtons[XPAD_X] > 0x20)? 1 : 0;
   keys[SDL_SCANCODE_UP] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_UP) ? 1 : 0;
   keys[SDL_SCANCODE_DOWN] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_DOWN) ? 1 : 0;
   keys[SDL_SCANCODE_LEFT] |= (g_Pads[pad].CurrentButtons.usDigitalButtons & XPAD_DPAD_LEFT) ? 1 : 0;
@@ -1185,7 +1373,7 @@ void SDL_GL_SwapWindow(SDL_Window* window) {
   pb_print("Pad: %d %d\n", g_Pads[pad].sRThumbX, g_Pads[pad].sRThumbY);
 
   pb_draw_text_screen();
-
+  pb_erase_text_screen();
 
   // Finish current frame
   
@@ -1206,7 +1394,7 @@ void SDL_GL_SwapWindow(SDL_Window* window) {
 
   pb_wait_for_vbl();
   pb_reset();
-  pb_target_back_buffer();
+  //pb_target_back_buffer();
 
 #else
 

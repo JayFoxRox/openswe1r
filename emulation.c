@@ -740,11 +740,11 @@ static unsigned int GetThreadCount() {
 
 static void memory_statistics() {
 #if 0 //#ifdef XBOX
-  debugPrint("           Memory statistics:\n");
+  printf("           Memory statistics:\n");
   MM_STATISTICS ms;
   ms.Length = sizeof(MM_STATISTICS);
   MmQueryStatistics(&ms);
-	#define PRINT(stat) debugPrint("           - " #stat ": %d\n", ms.stat);
+	#define PRINT(stat) printf("           - " #stat ": %d\n", ms.stat);
   PRINT(TotalPhysicalPages)
   PRINT(AvailablePages)
   PRINT(VirtualMemoryBytesCommitted)
@@ -757,9 +757,7 @@ static void memory_statistics() {
 
   uint32_t esp;
   asm("mov %%esp, %%eax":"=a"(esp));
-  debugPrint("           - Stack: 0x%X\n", esp);
-  
-  printf("           - AvailablePages: %d\n", ms.AvailablePages);
+  printf("           - Stack: 0x%X\n", esp);
 #endif
 }
 
