@@ -32,7 +32,7 @@ CFLAGS += -I$(SDL_DIR)/include
 CFLAGS += -Wno-inconsistent-dllimport
 
 #FIXME: Slow mode for pbkit! remove!
-CFLAGS += -DGPU=1
+CFLAGS += -DXBOX_GPU=1
 CFLAGS += -DDBG=1
 
 # We are short on memory, so reduce binary footprint

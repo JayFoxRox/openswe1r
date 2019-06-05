@@ -4,6 +4,14 @@
 // Some of these will likely be stubbed / disabled in OpenSWE1R.
 // However, it's currently not known which parts exactly; so this is a hack.
 
+#ifndef XBOX
+#ifdef XBOX_GPU
+#error Disable XBOX_GPU when XBOX is not enabled
+#endif
+#endif
+
+
+
 
 
 
@@ -17,6 +25,15 @@
 
 
 
+
+
+
+#ifndef XBOX_GPU
+#ifdef USE_TEXTURES
+#warning USE_TEXTURES was disabled because XBOX_GPU is not active
+#undef USE_TEXTURES
+#endif
+#endif
 
 #include <stdio.h>
 
@@ -37,13 +54,18 @@
 
 #include "SDL.h"
 
+#ifdef XBOX
 #include <hal/video.h>
+#endif
+
 static int SCREEN_WIDTH = 0;
 static int SCREEN_HEIGHT = 0;
 static int SCREEN_BPP = 0;
 
+#ifdef XBOX
 #include <hal/input.h>
 static const int pad = 0;
+#endif
 
 static int mouse_x = 0;
 static int mouse_y = 0;
@@ -68,14 +90,13 @@ static int mouse_y = 0;
 #include <string.h>
 #include <strings.h>
 
-#ifdef GPU
+#ifdef XBOX_GPU
 #include <hal/video.h>
 #include <hal/xbox.h>
 #include <math.h>
 #include <pbkit/pbkit.h>
 #include <xboxkrnl/xboxkrnl.h>
 #include <xboxrt/debug.h>
-#endif
 
 
 #define MASK(mask, val) (((val) << (ffs(mask)-1)) & (mask))
@@ -187,7 +208,6 @@ static void draw_arrays(unsigned int mode, int start, int count)
 
 
 
-
 void initialize_screen(void) {
   static bool initialized = false;
 
@@ -202,7 +222,7 @@ void initialize_screen(void) {
   SCREEN_HEIGHT = vm.height;
   SCREEN_BPP = vm.bpp;
 
-#ifdef GPU
+#ifdef XBOX_GPU
   // Set up rendering
   pb_show_front_screen();
   int width = pb_back_buffer_width();
@@ -229,6 +249,8 @@ void initialize_screen(void) {
   // Mark as initialized
   initialized = true;
 }
+
+#endif
 
 
 // unistd.. thanks SDL
@@ -318,7 +340,7 @@ extern float clipScale[];
 extern float clipOffset[];
 
 
-#ifndef GPU
+#ifndef XBOX_GPU
 uint8_t buffer[640*480] = {0};
 #endif
 
@@ -368,7 +390,7 @@ GLAPI void GLAPIENTRY glClearDepth (GLclampd depth) {
 GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
   printf("%s\n", __func__);
 
-#ifdef GPU
+#ifdef XBOX_GPU
 
   /* Clear depth & stencil buffers */
 
@@ -387,7 +409,9 @@ GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
 
   //FIXME: Clear color?!
   memset(buffer, 0x00, sizeof(buffer));
+#ifdef XBOX
   debugClearScreen();
+#endif
 
 #endif
 
@@ -420,7 +444,7 @@ GLAPI void GLAPIENTRY glDisable (GLenum cap) {
 }
 
 
-#ifndef GPU
+#ifndef XBOX_GPU
 static void saveBuffer() {
 
   static int t = 0;
@@ -497,7 +521,7 @@ static void drawVertex(int i) {
   //if ((z < 0) || (z > 0xFF)) { return; }
   z = 0xFF;  
 
-#ifdef GPU
+#ifdef XBOX_GPU
 
   pb_fill(x, y, 1, 1, 0xFF00FFFF); // Cyan
 
@@ -507,7 +531,7 @@ static void drawVertex(int i) {
   buffer[y * 640 + x] = 0x80 + z / 2;
 
 
-
+#ifdef XBOX
   // Draw to actual Xbox framebuffer
   unsigned char *videoBuffer = XVideoGetFB();
   videoBuffer += (y * SCREEN_WIDTH + x) * (SCREEN_BPP >> 3);
@@ -520,13 +544,14 @@ static void drawVertex(int i) {
       *((short*)videoBuffer) = 0xFFFF;
       break;
   }
+#endif
 
 #endif
 
 }
 #endif
 
-#ifdef GPU
+#ifdef XBOX_GPU
 static void prepare_vertices(void) {
   uint32_t *p;
 
@@ -735,7 +760,7 @@ static void prepare_vertices(void) {
 GLAPI void GLAPIENTRY glDrawArrays (GLenum mode, GLint first, GLsizei count) {
   printf("%s\n", __func__);
 
-#ifdef GPU
+#ifdef XBOX_GPU
   prepare_vertices();
 
 debugPrint("array {\n");
@@ -745,8 +770,12 @@ debugPrint("}\n");
 
 #endif
 
+#ifdef XBOX
 debugPrint("heh.. fuck!\n");
 pb_kill();
+#else
+printf("heh.. fuck!\n");
+#endif
 while(1);
 
 #ifdef MARK_VERTICES
@@ -774,7 +803,7 @@ GLAPI void GLAPIENTRY glDrawElements (GLenum mode, GLsizei count, GLenum type, c
   assert(type == GL_UNSIGNED_SHORT);
   uint16_t* i16 = (uint16_t*)((uintptr_t)element_array_buffer + (uintptr_t)indices);
 
-#ifdef GPU
+#ifdef XBOX_GPU
 
   //FIXME: Why doesn't this work? still only draws some of them
 #if 1
@@ -957,7 +986,9 @@ GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* 
     element_array_buffer = realloc(element_array_buffer, size);
     memcpy(element_array_buffer, data, size);
   } else if (target == GL_ARRAY_BUFFER) {
-    // Xbox accesses vertices with GPU, so must be non-paged
+    // Xbox accesses vertices with XBOX_GPU, so must be non-paged
+
+#ifdef XBOX_GPU
 
     //FIXME: Only wait if buffer is in use
     while(pb_busy()) {
@@ -966,8 +997,18 @@ GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* 
 
     if (array_buffer != NULL) { MmFreeContiguousMemory(array_buffer); }
     array_buffer = MmAllocateContiguousMemoryEx(size, 0, 0x3ffb000, 0, 0x404);
+
+#else
+
+    array_buffer = realloc(array_buffer, size);
     memcpy(array_buffer, data, size);
+
+#endif
+
+    memcpy(array_buffer, data, size);
+
   } else if (target == GL_PIXEL_UNPACK_BUFFER) {
+
 #ifdef USE_TEXTURES
     assert(pixel_unpack_buffer != NULL); // PBO must be bound
 
@@ -987,6 +1028,7 @@ GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* 
 #endif
     memcpy(*pixel_unpack_buffer, data, size);
 #endif
+
   } else {
     assert(false);
   }
@@ -1258,7 +1300,7 @@ const Uint8* SDL_GetKeyboardState(int* numkeys) {
   static unsigned char keys[256];
   memset(keys, 0x00, sizeof(keys));
 
-  int pad = 0;
+#ifdef XBOX
 
   //FIXME: Poll input - This is a hack! because of shitty USB code
   XInput_GetEvents();
@@ -1303,6 +1345,8 @@ const Uint8* SDL_GetKeyboardState(int* numkeys) {
   keys[SDL_SCANCODE_LALT] |= 0;
   keys[SDL_SCANCODE_RALT] |= 0;
 
+#endif
+
   return keys;
 }
 
@@ -1313,12 +1357,14 @@ Uint32 SDL_GetMouseState(int* x, int* y) {
   //mouse_x += dx * dt;
   //mouse_y += dy * dt;
 
+#ifdef XBOX
   //FIXME: Poll input - This is a hack! because of shitty USB code
   XInput_GetEvents();
 
   //FIXME: This is just a dirty hack.. remove
   mouse_x = SCREEN_WIDTH / 2 + g_Pads[pad].sRThumbX / 64;
   mouse_y = -40 + SCREEN_HEIGHT / 2 - g_Pads[pad].sRThumbY / 64; // Hack to pre-select single player
+#endif
 
   if (mouse_x < 0) { mouse_x = 0; }
   if (mouse_y < 0) { mouse_y = 0; }
@@ -1360,7 +1406,7 @@ int SDL_GL_SetAttribute(SDL_GLattr attr, int        value) {
 void SDL_GL_SwapWindow(SDL_Window* window) {
   printf("%s\n", __func__);
 
-#ifdef GPU
+#ifdef XBOX_GPU
 
   //FIXME: Poll input - This is a hack! because of shitty USB code
   XInput_GetEvents();
@@ -1402,7 +1448,9 @@ void SDL_GL_SwapWindow(SDL_Window* window) {
 
 #endif
 
-  //saveBuffer();
+#ifndef XBOX
+  saveBuffer();
+#endif
 
   return;
 }
