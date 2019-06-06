@@ -710,6 +710,31 @@ static unsigned int GetThreadCount() {
   return threadCount;
 }
 
+static void memory_statistics() {
+#if 0
+  printf("Memory statistics:\n");
+#ifdef XBOX
+  MM_STATISTICS ms;
+  ms.Length = sizeof(MM_STATISTICS);
+  MmQueryStatistics(&ms);
+	#define PRINT(stat) printf("- " #stat ": %d\n", ms.stat);
+  PRINT(TotalPhysicalPages)
+  PRINT(AvailablePages)
+  PRINT(VirtualMemoryBytesCommitted)
+  PRINT(VirtualMemoryBytesReserved)
+  PRINT(CachePagesCommitted)
+  PRINT(PoolPagesCommitted)
+  PRINT(StackPagesCommitted)
+  PRINT(ImagePagesCommitted)
+  #undef PRINT
+#endif
+
+  uint32_t esp;
+  asm("mov %%esp, %%eax":"=a"(esp));
+  printf("- Stack: 0x%X\n", esp);
+#endif
+}
+
 void RunEmulation() {
   uc_err err;
 
@@ -733,6 +758,9 @@ void RunEmulation() {
     TransferContext(ctx, true);
 
     while(true) {
+
+      memory_statistics();
+
       err = uc_emu_start(uc, ctx->eip, 0, 0, 0);
 
       // Finish profiling, if we have partial data
