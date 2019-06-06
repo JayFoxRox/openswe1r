@@ -43,7 +43,7 @@ static uint32_t stackSize = 256 * 1024; // I've measured, and about 140k are in 
 
 #define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 16 * 1024 * 1024; // 16 MiB
+static uint32_t heapSize = 0x1000; //16 * 1024 * 1024; // 16 MiB
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
