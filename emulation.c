@@ -440,6 +440,10 @@ Address CreateHlt() {
       "add $32, %%esp\n"
       "pusha\n"
 
+      // Move to host fs
+      "mov host_fs, %%eax\n"
+      "mov %%eax, %%fs:0\n"
+
       // Move to host space
       "mov host_esp, %%esp\n"
       "popa\n"

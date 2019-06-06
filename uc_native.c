@@ -297,6 +297,7 @@ static uint32_t _begin asm("_begin");
 Registers* guest_registers;
 uint32_t guest_registers_esp;
 uint32_t host_esp;
+uint32_t host_fs;
 jmp_buf* host_jmp;
 
 uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t timeout, size_t count) {
@@ -365,6 +366,10 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
                  // Make host backup
                  "pusha\n"
                  "mov %%esp, host_esp\n"
+
+                 // Get host fs stuff
+                 "mov %%fs:0, %%eax\n"
+                 "mov %%eax, host_fs\n"
 
                  // Load all registers
                  "mov guest_registers, %%esp\n"

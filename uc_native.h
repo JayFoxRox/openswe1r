@@ -34,5 +34,6 @@ extern jmp_buf* host_jmp;
 extern uint32_t guest_registers_esp asm("guest_registers_esp");
 extern Registers* guest_registers asm("guest_registers");
 extern uint32_t host_esp asm("host_esp");
+extern uint32_t host_fs asm("host_fs");
 
 #endif
