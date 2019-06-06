@@ -38,12 +38,10 @@ static uint32_t AlignUp(uint32_t address, uint32_t size) {
 
 static void* aligned_malloc(size_t alignment, size_t size) {
   void* ptr;
-#if defined(_WIN32)
 #ifdef XBOX
   ptr = MmAllocateContiguousMemoryEx(size, 0x00000000, 0xFFFFFFFF, alignment, PAGE_READWRITE);
-#else
+#elif defined(_WIN32)
   ptr = _aligned_malloc(size, alignment);
-#endif
 #else
   posix_memalign(&ptr, alignment, size);
 #endif
@@ -52,12 +50,10 @@ static void* aligned_malloc(size_t alignment, size_t size) {
 }
 
 static void aligned_free(void* ptr) {
-#if defined(_WIN32)
 #ifdef XBOX
   MmFreeContiguousMemory(ptr);
-#else
+#elif defined(_WIN32)
   _aligned_free(ptr);
-#endif
 #else
   free(ptr);
 #endif
