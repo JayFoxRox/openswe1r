@@ -39,7 +39,7 @@ static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 256 * 1024; // About 140kiB are in use at maximum
+static uint32_t stackSize = 700 * 1024; // About 140kiB are in use at maximum
 
 #define HEAP_ADDRESS 0x81000000
 static uint32_t heapAddress = HEAP_ADDRESS;
@@ -678,7 +678,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize;
+  uint32_t esp = stackAddress + stackSize / 2;
   assert(threadId < 4);
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
