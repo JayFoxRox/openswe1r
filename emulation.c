@@ -27,6 +27,8 @@
 #include <sys/mman.h>
 #include <errno.h>
 #endif
+#else
+#include "alloc.h"
 #endif
 
 //FIXME: These are hacks (register when mapping instead!)!
@@ -340,22 +342,14 @@ Address Allocate(Size size) {
 #ifdef UC_NATIVE
   Address ret = aligned_malloc(0x1000, size);
 #else
-  static uint32_t address = HEAP_ADDRESS;
-
-#if 1
-  //FIXME: This is a hack to fix alignment + to avoid too small allocations
-  address += 0xFFF;
-  address &= 0xFFFFF000;
-#endif
-
-  Address ret = address;
-
-  address += size;
-  //FIXME: Proper allocator
-
-  assert(address < (HEAP_ADDRESS + heapSize));
-  int use = (address - HEAP_ADDRESS);
-  printf("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
+  static bool initialized = false;
+  if (!initialized) {
+    alloc_initialize(heapSize, 0x1000);
+    initialized = true;
+  }
+  uint32_t offset = alloc_allocate(size);
+  Address ret = heapAddress + offset;
+  printf("0x%X + 0x%X = 0x%X\n", heapAddress, offset, ret);
 #endif
 
   assert(ret != 0);
@@ -372,7 +366,7 @@ void Free(Address address) {
 #ifdef UC_NATIVE
   aligned_free(address);
 #else
-  //FIXME!
+  alloc_free(address - heapAddress);
 #endif
 }
 
