@@ -361,6 +361,8 @@ void Free(Address address) {
 
 void* Memory(uint32_t address) {
 
+  uint32_t orig_address = address;
+
   if (address >= heapAddress && address < (heapAddress + heapSize)) {
     return &heap[address - heapAddress];
   }
@@ -381,6 +383,11 @@ void* Memory(uint32_t address) {
     }
   }
 
+#ifdef UC_NATIVE
+  if (orig_address >= 0x80000000) {
+    return orig_address;
+  }
+#endif
   return NULL;
 }
 
