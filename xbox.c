@@ -585,6 +585,7 @@ int SDL_Delay(int a0) {
 int SDL_GetKeyboardState(int a0) {
   printf("%s\n", __func__);
   static unsigned char keys[256];
+  memset(keys, 0x00, sizeof(keys));
   return keys;
 }
 
