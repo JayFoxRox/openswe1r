@@ -4062,6 +4062,10 @@ int main(int argc, char* argv[]) {
   // Clear log
   FILE* f = fopen("log.txt", "wb");
   fclose(f);
+#else
+  //dup2(stdout, stderr);
+  setbuf(stdout, 0);
+  setbuf(stderr, 0);
 #endif
 
 
