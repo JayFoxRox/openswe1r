@@ -323,6 +323,11 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
 }
 
 Address Allocate(Size size) {
+#ifdef UC_NATIVE
+  Address ret = aligned_malloc(0x1000, size);
+  memset(Memory(ret), 0xDD, size);
+  return ret;
+#else
   static uint32_t address = HEAP_ADDRESS;
   uint32_t ret = address;
   address += size;
@@ -343,10 +348,15 @@ address &= 0xFFFFF000;
   debugPrint("%u / %u = %u percent\n", use, heapSize, (use * 100) / heapSize);
 
   return ret;
+#endif
 }
 
 void Free(Address address) {
+#ifdef UC_NATIVE
+  //aligned_free(address);
+#else
   //FIXME!
+#endif
 }
 
 void* Memory(uint32_t address) {
