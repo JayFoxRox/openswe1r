@@ -43,7 +43,11 @@ static uint32_t tlsSize = 0x1000;
 static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
 static uint32_t stackSize = 160 * 1024; // About 140kiB are in use at maximum
 
+#ifdef XBOX
 #define HEAP_ADDRESS 0x81000000
+#else
+#define HEAP_ADDRESS 0x83400000
+#endif
 static uint32_t heapAddress = HEAP_ADDRESS;
 #ifdef UC_NATIVE
 static uint32_t heapSize = 0x1000; // Dummy page
