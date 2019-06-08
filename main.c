@@ -4442,6 +4442,21 @@ for(int i = 0; i <= 0x13; i++) {
   *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
   *p++ = 0xC3;              // ret
 
+  // This instruction in the webdemo causes an illegal access.
+  // It accesses 4 bytes, starting 3 bytes before the end of an allocation.
+#if 1
+  *(uint8_t*)Memory(0x44ae32+0) = 0x90;
+  *(uint8_t*)Memory(0x44ae32+1) = 0x90;
+#endif
+
+#if 1
+  //FIXME: These are for the webdemo version only
+  // Valgrind doesn't like this, so we remove the prefix
+  //   cs mov eax, eax -> mov eax, eax
+  *(uint8_t*)Memory(0x4a6421) = 0x90;
+  *(uint8_t*)Memory(0x4A63E1) = 0x90;
+#endif
+
 // 0x90 = nop (used to disable code)
 // 0xC3 = ret (used to skip function)
 // 0x84 = je (probably used to be `jne`, used to invert condition)
