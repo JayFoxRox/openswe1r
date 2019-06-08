@@ -315,7 +315,7 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   //FIXME: Respect protection
   Size page_size = sysconf(_SC_PAGE_SIZE);
   Address check_address = address;
-  while(check_address <= (address + size)) {
+  while(check_address < (address + size)) {
     int ret = msync(check_address, page_size, MS_ASYNC);
     assert((ret == -1) && (errno == ENOMEM));
     check_address += page_size;
