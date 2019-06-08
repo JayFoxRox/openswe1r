@@ -873,7 +873,7 @@ HACKY_IMPORT_BEGIN(GetLastError)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(TlsGetValue)
-  silent = true;
+  silent = false;
   if (!silent) {
     hacky_printf("dwTlsIndex 0x%" PRIX32 "\n", stack[1]);
   }
