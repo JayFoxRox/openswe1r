@@ -291,6 +291,11 @@ GLAPI void GLAPIENTRY glScissor (GLint x, GLint y, GLsizei width, GLsizei height
 GLAPI void GLAPIENTRY glTexImage2D (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void *pixels) {
   printf("%s\n", __func__);
 
+  //FIXME: Add support for PBOs
+  if (pixels == NULL) {
+    return;
+  }
+
   switch(type) {
   case GL_UNSIGNED_BYTE: {
     FILE* f = fopen("rgba8888.bin", "wb");

@@ -2045,14 +2045,16 @@ enum {
 
   if (desc->ddsCaps.dwCaps & API(DDSCAPS_TEXTURE)) {
     // FIXME: Delay this until the interface is queried the first time?!
-    surface->texture = CreateInterface("IDirect3DTexture2", 20);
+    surface->texture = CreateInterface("IDirect3DTexture2", 10);
+    surface->pbo = 0;
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
     texture->surface = surfaceAddress;
     glGenTextures(1, &texture->handle);
     printf("GL handle is %d\n", texture->handle);
   } else {
     //FIXME: only added to catch bugs, null pointer should work
-    surface->texture = CreateInterface("invalid", 50);
+    surface->texture = CreateInterface("invalid", 10);
+    surface->pbo = 0;
 
     //FIXME: WTF is this shit?!
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
@@ -2374,6 +2376,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
     surface->desc.ddpfPixelFormat.dwRGBBitCount = 16;
 
     surface->texture = 0;
+    surface->pbo = 0;
     *(Address*)Memory(stack[3]) = surfaceAddress;
   }
   //FIXME: Used to retrieve surface for mipmaps?!
@@ -2428,9 +2431,20 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   //Hack: Part 1: check if we already have this surface in RAM
   if (this->desc.lpSurface == 0) {
     this->desc.lpSurface = Allocate(this->desc.dwHeight * this->desc.lPitch);
-    memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
   }
 
+  // Start a clean surface, or load it from PBO, if available
+  if (this->pbo == 0) {
+    memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
+  } else {
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, this->pbo);
+    void* ptr = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_READ_ONLY);
+    if (ptr != NULL) { //FIXME: Just assert this!
+      memcpy(Memory(this->desc.lpSurface), ptr, this->desc.dwHeight * this->desc.lPitch);
+      glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  }
 
   if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
     assert(this->desc.lPitch == 2 * this->desc.dwWidth);
@@ -2503,19 +2517,25 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  if (this->pbo == 0) {
+    glGenBuffers(1, &this->pbo);
+  }
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, this->pbo);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, desc->dwHeight * desc->lPitch, Memory(desc->lpSurface), GL_STATIC_DRAW);
   if (desc->ddpfPixelFormat.dwRGBBitCount == 32) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
   } else {
     if (desc->ddpfPixelFormat.dwRGBAlphaBitMask == 0x8000) {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, NULL);
     } else {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, NULL);
     }
   }
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, previousTexture);
 
 //Hack: part 2: don't free this to keep data in RAM. see lock for part 1
-#if 0
+#if 1
   Free(desc->lpSurface);
   desc->lpSurface = 0;
 #endif
