@@ -329,6 +329,7 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   err = uc_mem_map_ptr(uc, address, size, UC_PROT_ALL, memory);
   if (err) {
     printf("Failed on uc_mem_map_ptr() with error returned %u: %s\n", err, uc_strerror(err));
+    assert(false);
   }
   //FIXME: Add to mapped memory list
   return memory;
