@@ -107,14 +107,46 @@ uint32_t tls[1000] = {0};
 static void UnknownImport(void* uc, Address address, void* user_data);
 Address CreateInterface(const char* name, unsigned int slotCount) {
   //FIXME: Unsure about most terminology / inner workings here
-  Address interfaceAddress = Allocate(1000); //FIXME: Size of object
-  Address vtableAddress = Allocate(4 * slotCount);
-  char* slotNames = malloc(64 * slotCount);
+  Size object_size = 1000;
+  static int objectcount = 0;
+  printf("objectcount: %d\n", objectcount++);
+  Address interfaceAddress = Allocate(object_size); //FIXME: Size of object
+  Address vtableAddress = Allocate(4 * slotCount + 32 * slotCount);
+  assert(vtableAddress != 0);
+
+#if 1
+debugPrint("FOO B\n");
+  static Address IDirectDrawSurface4 = 0;
+  static Address IDirect3DTexture2 = 0;
+  if (!strcmp(name, "IDirectDrawSurface4")) {
+    assert(slotCount == 50);
+    if (IDirectDrawSurface4 == 0) {
+      IDirectDrawSurface4 = vtableAddress;
+    } else {
+      Free(vtableAddress);
+      vtableAddress = IDirectDrawSurface4;
+    }
+  } else if (!strcmp(name, "IDirect3DTexture2")) {
+    assert(slotCount == 10);
+    if (IDirect3DTexture2 == 0) {
+      IDirect3DTexture2 = vtableAddress;
+    } else {
+      Free(vtableAddress);
+      vtableAddress = IDirect3DTexture2;
+    }
+  }
+  assert(vtableAddress != 0);
+debugPrint("FOO E\n");
+#endif
+
+  char* slotNames = Memory(vtableAddress + 4 * slotCount);
   uint32_t* vtable = (uint32_t*)Memory(vtableAddress);
+
   for(unsigned int i = 0; i < slotCount; i++) {
     // Point addresses to themself
-    char* slotName = &slotNames[i * 64];
+    char* slotName = &slotNames[i * 32];
     sprintf(slotName, "%s__%d", name, i);
+    assert(strlen(slotName) < 32);
     Export* export = LookupExportByName(slotName);
 
     Address hltAddress;
