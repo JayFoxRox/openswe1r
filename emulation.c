@@ -321,9 +321,6 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
     check_address += page_size;
   }
   void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
-
-
-  memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
 #endif
   assert(memory == address);
 #else
