@@ -46,7 +46,18 @@ static void* aligned_malloc(size_t alignment, size_t size) {
 #elif defined(_WIN32)
   ptr = _aligned_malloc(size, alignment);
 #else
-  posix_memalign(&ptr, alignment, size);
+//#define CANARY
+#ifdef CANARY
+  // Catch some errors with the game by allocating 2 dummy pages
+  size = AlignUp(size, alignment);
+  int ret = posix_memalign(&ptr, alignment, size + 0x2000);
+  assert(ret == 0);
+  mprotect(ptr, size + 0x2000, PROT_NONE);
+  ptr = (uintptr_t)ptr + 0x1000;
+#else
+  int ret = posix_memalign(&ptr, alignment, size);
+  assert(ret == 0);
+#endif
   mprotect(ptr, size, PROT_READ | PROT_WRITE | PROT_EXEC);
 #endif
   assert(ptr <= 0xFFFFFFFF);
@@ -63,6 +74,9 @@ static void aligned_free(void* ptr) {
 #elif defined(_WIN32)
   _aligned_free(ptr);
 #else
+#ifdef CANARY
+  ptr = (uintptr_t)ptr - 0x1000;
+#endif
   free(ptr);
 #endif
 }
