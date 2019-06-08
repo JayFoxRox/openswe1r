@@ -31,4 +31,6 @@ CFLAGS += -DXBOX -DAPIENTRY= -DGLAPI=
 SDL_DIR = $(NXDK_DIR)/lib/sdl/SDL2
 CFLAGS += -I$(SDL_DIR)/include
 
+CFLAGS += -Wno-inconsistent-dllimport
+
 include $(NXDK_DIR)/Makefile

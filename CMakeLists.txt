@@ -86,7 +86,7 @@ if(USE_NATIVE)
   )
   target_compile_definitions(openswe1r PUBLIC -DUC_NATIVE -DUC_KVM)
 
-  set_target_properties(openswe1r PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32 -static-libgcc")
+  set_target_properties(openswe1r PROPERTIES COMPILE_FLAGS "-m32 -O0" LINK_FLAGS "-m32 -static-libgcc -O0")
 
 else()
 
