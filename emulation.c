@@ -710,7 +710,8 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
   }
   static int threadId = 0;
   uint32_t esp = stackAddress + stackSize - 1024; // We give 1k of headroom
-  assert(threadId < 4);
+  assert(threadId == 0);
+  threadId++;
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
   ThreadContext* ctx = &threads[threadCount - 1];
