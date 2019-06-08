@@ -52,7 +52,7 @@ static uint32_t heapAddress = HEAP_ADDRESS;
 #ifdef UC_NATIVE
 static uint32_t heapSize = 0x1000; // Dummy page
 #else
-static uint32_t heapSize = 20 * 1024 * 1024; // 16 MiB
+static uint32_t heapSize = 200 * 1024 * 1024; // 16 MiB
 #endif
 
 static uc_engine *uc;
