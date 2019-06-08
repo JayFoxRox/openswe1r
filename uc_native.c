@@ -238,14 +238,17 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
     u->registers.eip = *(int*)value;
   } else if (regid == UC_X86_REG_ESP) {
     u->registers.esp = *(unsigned int*)value;
+#if 0
   } else if (regid == UC_X86_REG_EBP) {
     u->registers.ebp = *(int*)value;
   } else if (regid == UC_X86_REG_ESI) {
     u->registers.esi = *(int*)value;
   } else if (regid == UC_X86_REG_EDI) {
     u->registers.edi = *(int*)value;
+#endif
   } else if (regid == UC_X86_REG_EAX) {
     u->registers.eax = *(int*)value;
+#if 0
   } else if (regid == UC_X86_REG_EBX) {
     u->registers.ebx = *(int*)value;
   } else if (regid == UC_X86_REG_ECX) {
@@ -300,6 +303,7 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
   }
   else {
     assert(false);
+#endif
   }
 
   return 0;
