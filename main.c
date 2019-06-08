@@ -590,9 +590,17 @@ HACKY_IMPORT_BEGIN(HeapAlloc)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("dwBytes 0x%" PRIX32 "\n", stack[3]);
-  eax = Allocate(stack[3]);
+
+  //FIXME: The game has a bug, where it allocates 1 byte too few in at least
+  //       one instance. The error will be at 0x44ae32 in the webdemo
+  uint32_t size = stack[3];
+
+  eax = Allocate(size);
+
+  assert((stack[2] == 0x0) || (stack[2] == 0x8));
+
   //FIXME: Only do this if flag is set..
-  memset(Memory(eax), 0x00, stack[3]);
+  memset(Memory(eax), 0x00, size);
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
