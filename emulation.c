@@ -415,26 +415,14 @@ void* Memory(uint32_t address) {
 
 #ifdef UC_NATIVE
 #include "uc_native.h"
-#include <setjmp.h>
 
-static uint32_t host_eip;
+uint32_t host_eip;
 
 #ifndef __stdcall
 #define __stdcall __attribute__((stdcall))
 #endif
-
-
-void __stdcall return_to_host() asm("return_to_host");
-void __stdcall return_to_host() {
-  guest_registers->esp = guest_registers_esp;
-  guest_registers->eip = host_eip;
-#if 0
-  asm("mov $0, %%ax\n"
-      "mov %%ax, %%fs\n":);
 #endif
-  longjmp(*host_jmp, 1);
-}
-#endif
+
 
 Address CreateHlt() {
 #ifdef UC_NATIVE
@@ -483,7 +471,12 @@ Address CreateHlt() {
       "popf\n"
       "fxrstor host_registers_fpu\n"
 
-      "call return_to_host\n"
+#ifdef XBOX
+      // Re-enable interrupts
+      "sti\n"
+#endif
+
+      "jmp return_to_host\n"
       "continue:\n":::"eax", "esp", "memory");
 
   uint8_t* code = Memory(code_address);
@@ -493,14 +486,14 @@ Address CreateHlt() {
   *code++ = 0x05;
   *(uint32_t*)code = (uintptr_t)&host_eip;
   code += 4;
-  *(uint32_t*)code = code_address + 1;
+  *(uint32_t*)code = code_address + 2;
   code += 4;
 
   *code++ = 0xE9; // jmp __return_to_host
   *(uint32_t*)code = (uintptr_t)__return_to_host_entry - (uintptr_t)code - 4;
   code += 4;
 #else
-  Address code_address = Allocate(2);
+  Address code_address = Allocate(3);
   uint8_t* code = Memory(code_address);
   *code++ = 0x90; // Marker
   *code++ = 0xF4; // HLT
@@ -819,12 +812,15 @@ void RunEmulation() {
 
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
 
-      Address hltAddress = ctx->eip - 1;
+      Address hltAddress = ctx->eip - 2;
       assert(*(uint8_t*)Memory(hltAddress) == 0x90);
 
       HltHandler* hltHandler = findHltHandler(hltAddress);
       if(hltHandler != NULL) {
+        printf("Running handler for '%s'\n",  hltHandler->user_data);
         hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+      } else {
+        assert(false);
       }
 
       //Hack: Manually transfers EIP (might have been changed in callback)

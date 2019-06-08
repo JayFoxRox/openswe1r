@@ -6,7 +6,6 @@
 
 #include <stdlib.h>
 #include <assert.h>
-#include <setjmp.h>
 #include <inttypes.h>
 
 #ifdef XBOX
@@ -31,10 +30,8 @@ uint8_t host_registers_fpu[512] __attribute__((aligned(16)));
 uint32_t guest_registers_esp;
 uint32_t host_esp;
 uint32_t host_fs;
-jmp_buf* host_jmp;
 
 typedef struct {
-  jmp_buf jmp;
   Registers registers;
 } uc_engine_native;
 
@@ -312,90 +309,91 @@ uc_err uc_emu_start(uc_engine *uc, uint64_t begin, uint64_t until, uint64_t time
   uc_engine_native* u = (uc_engine_native*)uc;
   printf("uc_emu_start\n");
 
-  host_jmp = &u->jmp;
+  extern uint32_t callId;
+  printf("Doing some bullshit %d at 0x%08X\n", callId, begin);
 
-  if (setjmp(*host_jmp) == 0) {
-extern uint32_t callId;
-    printf("Doing some bullshit %d at 0x%08X\n", callId, begin);
-
-    _begin = begin;
+  _begin = begin;
 
 // For Xbox we can use the existing FS (might get corrupted?)
 #ifndef XBOX
-    static struct user_desc ldt_desc;
-  
+  static struct user_desc ldt_desc;
 
-    static uint8_t* tls = NULL;
-    if (tls == NULL) {
-      tls = malloc(0x1000);
-      memset(tls, 0xBB, 0x1000);
-      u->registers.fs_base = tls;
 
-  #if 0
-      ldt_desc.entry_number = 0x63 >> 3;
-      int ret2 = syscall(SYS_get_thread_area, &ldt_desc);
-      printf("%d\n", ldt_desc.limit);
-      printf("0x%X\n", ldt_desc.contents);
-  #endif
+  static uint8_t* tls = NULL;
+  if (tls == NULL) {
+    tls = malloc(0x1000);
+    memset(tls, 0xBB, 0x1000);
+    u->registers.fs_base = tls;
 
-      ldt_desc.entry_number = -1;
-      ldt_desc.base_addr = u->registers.fs_base;
-      ldt_desc.limit = 0xFFF;
-      ldt_desc.seg_32bit = 1;
-      ldt_desc.contents = 0x0;
-      ldt_desc.read_exec_only = 0;
-      ldt_desc.limit_in_pages = 0;
-      ldt_desc.seg_not_present = 0;
-      ldt_desc.useable = 1;
+#if 0
+    ldt_desc.entry_number = 0x63 >> 3;
+    int ret2 = syscall(SYS_get_thread_area, &ldt_desc);
+    printf("%d\n", ldt_desc.limit);
+    printf("0x%X\n", ldt_desc.contents);
+#endif
 
-      int ret = syscall(SYS_set_thread_area, &ldt_desc);
-      printf("%d: Got seg %d\n", ret, ldt_desc.entry_number);
-  }
+    ldt_desc.entry_number = -1;
+    ldt_desc.base_addr = u->registers.fs_base;
+    ldt_desc.limit = 0xFFF;
+    ldt_desc.seg_32bit = 1;
+    ldt_desc.contents = 0x0;
+    ldt_desc.read_exec_only = 0;
+    ldt_desc.limit_in_pages = 0;
+    ldt_desc.seg_not_present = 0;
+    ldt_desc.useable = 1;
 
-  // Set FS to use our new thread area
-  uint16_t seg = ldt_desc.entry_number;
-  asm("shl $3, %%ax\n"
-      "or $0x3, %%ax\n"
-      "movw %%ax, %%fs\n"::"a"(seg));
+    int ret = syscall(SYS_set_thread_area, &ldt_desc);
+    printf("%d: Got seg %d\n", ret, ldt_desc.entry_number);
+}
+
+// Set FS to use our new thread area
+uint16_t seg = ldt_desc.entry_number;
+asm("shl $3, %%ax\n"
+    "or $0x3, %%ax\n"
+    "movw %%ax, %%fs\n"::"a"(seg));
 #endif
 
 #if 0
-    uint32_t foo = 0;
-    asm("mov %%fs:0, %[foo]\n" : [foo]"=r"(foo)); // : [fs]"r"(fs));
-    printf("Read 0x%X\n", foo);
+  uint32_t foo = 0;
+  asm("mov %%fs:0, %[foo]\n" : [foo]"=r"(foo)); // : [fs]"r"(fs));
+  printf("Read 0x%X\n", foo);
 #endif
 
-    guest_registers = &u->registers;
-    guest_registers_esp = guest_registers->esp;
+  guest_registers = &u->registers;
+  guest_registers_esp = guest_registers->esp;
 
-    asm volatile(// Make host backup
-                 "fxsave host_registers_fpu\n"
-                 "pushf\n"
-                 "pusha\n"
-                 "mov %%esp, host_esp\n"
 
-                 // Get host fs stuff
-                 "mov %%fs:0, %%eax\n"
-                 "mov %%eax, host_fs\n"
+  asm volatile(// Make host backup
+               "fxsave host_registers_fpu\n"
+               "pushf\n"
+               "pusha\n"
+               "mov %%esp, host_esp\n"
 
-                 // Load all registers
-                 "mov guest_registers, %%esp\n"
-                 "popa\n"
-                 "popf\n"
-                 "mov guest_registers_esp, %%esp\n"
-                 //FIXME: Fixup ESP too
+               // Get host fs stuff
+               "mov %%fs:0, %%eax\n"
+               "mov %%eax, host_fs\n"
 
-                 // Load FPU registers
-                 "fxrstor guest_registers_fpu\n"
+               // Load all registers
+               "mov guest_registers, %%esp\n"
+               "popa\n"
+               "popf\n"
+               "mov guest_registers_esp, %%esp\n"
+               //FIXME: Fixup ESP too
 
-                 "jmp *_begin\n":::"eax", "esp", "memory");
+               // Load FPU registers
+               "fxrstor guest_registers_fpu\n"
+#ifdef XBOX
+               // Disable interrupts
+               "cli\n"
+#endif
+               "jmp *_begin\n"
+              
+              ".global return_to_host\n"
+               "return_to_host:\n":::"eax", "esp", "memory");
 
-    // This can never return, or setjmp / longjmp would break!
-    assert(false);
 
-  } else {
-    printf("Returned\n");
-  }
+  guest_registers->esp = guest_registers_esp;
+  guest_registers->eip = host_eip;
 
   return 0;
 }
