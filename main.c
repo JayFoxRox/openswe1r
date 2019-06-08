@@ -133,8 +133,12 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
     }
     vtable[i] = hltAddress;
   }
+
   // First element in object is pointer to vtable
-  *(uint32_t*)Memory(interfaceAddress) = vtableAddress;
+  API(IUnknown)* iunknown = Memory(interfaceAddress);
+  iunknown->vtable_address = vtableAddress;
+  iunknown->instance_size = object_size;
+  iunknown->reference_count = 1;
 
   return interfaceAddress;
 }
@@ -142,6 +146,28 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
 
 #endif
 
+
+static void AddRefInterface(Address address) {
+  API(IUnknown)* this = Memory(address);
+
+  // Keep track that the new surface is being used
+  this->reference_count++;
+}
+
+static void ReleaseInterface(Address address) {
+  API(IUnknown)* this = Memory(address);
+
+  // Remove reference
+  this->reference_count--;
+
+  // Check if the last user is gone now
+  if (this->reference_count == 0) {
+    printf("Free interface!\n");
+
+    //FIXME: Ref-counting is still broken.. or something
+    //Free(address);
+  }
+}
 
 
 
@@ -2201,6 +2227,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 0)
          iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
     printf("Returning texture 0x%" PRIX32 "\n", this->texture);
+
+    AddRefInterface(this->texture);
+
     *(Address*)Memory(stack[3]) = this->texture;
   } else {
     assert(false);
@@ -2212,6 +2241,9 @@ HACKY_COM_END()
 // IDirectDrawSurface4 -> STDMETHOD_(ULONG,AddRef) (THIS)  PURE; // 1
 HACKY_COM_BEGIN(IDirectDrawSurface4, 1)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  AddRefInterface(stack[1]);
+
   eax = 1; // New reference count
   esp += 1 * 4;
 HACKY_COM_END()
@@ -2219,6 +2251,13 @@ HACKY_COM_END()
 // IDirectDrawSurface4 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirectDrawSurface4, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  Address texture = this->texture;
+
+  ReleaseInterface(stack[1]);
+  ReleaseInterface(texture);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
@@ -2227,6 +2266,9 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IDirectDrawSurface4, 3)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+
+  AddRefInterface(stack[2]);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
@@ -2287,6 +2329,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 8)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
+
+  ReleaseInterface(stack[3]);
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -3205,6 +3249,9 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 0)
   if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
     API(Direct3DTexture2)* this = Memory(stack[1]);
     *(Address*)Memory(stack[3]) = this->surface;
+
+    AddRefInterface(this->surface);
+
   } else {
     assert(false);
   }
@@ -3217,6 +3264,9 @@ HACKY_COM_END()
 // IDirect3DTexture2 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirect3DTexture2, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  ReleaseInterface(stack[1]);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()

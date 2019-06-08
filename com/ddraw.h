@@ -235,7 +235,7 @@ enum {
 };
 
 typedef struct {
-  void* vtable;
+  API(IUnknown) iunknown;
   Address texture; // Direct3DTexture2*
   API(DDSURFACEDESC2) desc;
 } API(DirectDrawSurface4);

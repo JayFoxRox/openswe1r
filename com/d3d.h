@@ -11,7 +11,7 @@
 #include "../windows.h"
 
 typedef struct {
-  void* vtable;
+  API(IUnknown) iunknown;
   Address surface;
   GLuint handle;
 } API(Direct3DTexture2);
