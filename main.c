@@ -4086,6 +4086,164 @@ void RunX86(Exe* exe) {
 }
 
 #ifdef XBOX
+
+
+typedef struct {
+  union {
+    uint32_t edi;
+    uint16_t di;
+  };
+  union {
+    uint32_t esi;
+    uint16_t si;
+  };
+  uint32_t ebp;
+  uint32_t _esp;
+  union {
+    uint32_t ebx;
+    struct {
+      union {
+        uint16_t bx;
+        struct {
+          uint8_t bl, bh;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t edx;
+    struct {
+      union {
+        uint16_t dx;
+        struct {
+          uint8_t dl, dh;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t ecx;
+    struct {
+      union {
+        uint16_t cx;
+        struct {
+          uint8_t cl, ch;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t eax;
+    struct {
+      union {
+        uint16_t ax;
+        struct {
+          uint8_t al, ah;
+        };
+      };
+    };
+  };
+} __attribute__((packed)) Registers;
+
+typedef struct {
+  uint32_t error_code;
+  uint32_t eip;
+  uint16_t cs;
+  uint16_t _pad;
+  uint32_t eflags;
+} __attribute__((packed)) TrapFrame;
+
+void __stdcall page_fault_handler(uint32_t cr2, TrapFrame* trap_frame, Registers* registers) {
+
+  // This is an interrupt handler, so be careful with what you do.
+  // There shouldn't be any float math in here, and you should respect
+  // the IRQL requirements!
+
+  //FIXME: Hardware interrupts are still enabled.
+  //       We need to ensure that no hardware interrupt handler comes in,
+  //       and triggers this handler again?
+
+
+  // Print debug information if remapped address will trigger the same error
+  debugPrint("\n");
+
+  debugPrint("Illegal access: CR2=0x%x, CS=0x%x, EIP=0x%x, EFLAGS=0x%x, error-code=0x%x", cr2, trap_frame->cs, trap_frame->eip, trap_frame->eflags, trap_frame->error_code);
+  debugPrint(" EAX=0x%x, ECX=0x%x\n", registers->eax, registers->ecx);
+
+  // Get access to instruction bytes
+  uint8_t* instruction = (uint8_t*)trap_frame->eip;
+
+  debugPrint("Instruction:");
+  for(unsigned int i = 0; i < 16; i++) {
+    debugPrint(" %x%x", instruction[i] >> 4, instruction[i] & 0xF);
+  }
+  debugPrint("\n");
+
+  while(true);
+}
+
+// This handler will be called for page faults
+void __stdcall page_fault_isr(void);
+asm("_page_fault_isr@0:\n"
+
+  // Disable interrupts
+  "cli\n"
+
+  // Set stack direction
+  "cld\n"
+
+  // Keep a copy of all registers
+  "pusha\n"
+
+  // Get pointer to all regs (top of stack); push it
+  "mov %esp, %eax\n"
+  "push %eax\n"
+
+  // Above the regs (32 bytes), there's the trap frame; push it
+  "add $32, %eax\n"
+  "push %eax\n"
+
+  // Now retrieve the address that triggered the page fault; push it
+  "movl %cr2, %eax\n"
+  "push %eax\n"
+
+  // Call the C handler
+  "call _page_fault_handler@12\n"
+
+  // Retrieve the original registers again
+  "popa\n"
+
+  // Re-enable interrupts
+  "sti\n"
+
+  // Pop error code and return from interrupt
+  "add $4, %esp\n"
+  "iret\n"
+); //FIXME: Can this be relocated?!
+
+typedef struct {
+  uint16_t offset_lo;
+  uint16_t selector;
+  uint8_t zero;
+  uint8_t type_attr;
+  uint16_t offset_hi;
+} __attribute__((packed)) IDTEntry;
+
+typedef struct {
+  uint16_t length;
+  IDTEntry* entries;
+} __attribute__((packed)) IDT;
+
+void __stdcall get_idt(IDT* idt);
+asm("_get_idt@4:\n"
+  "mov +4(%esp), %eax\n"
+  "sidtl (%eax)\n"
+  "retn $4\n"
+);
+
+#endif
+
+#ifdef XBOX
 // Stolen from https://gist.github.com/mmozeiko/ae38aeb10add7cb66be4c00f24f8e688
 
 // C initializers
@@ -4123,6 +4281,25 @@ int main(int argc, char* argv[]) {
   setbuf(stderr, 0);
 #endif
 
+
+#ifdef XBOX
+  // Install page fault handler and NIC interrupt handler
+  //FIXME: This assumes that the IDT is always identity mapped.
+  //       We might want to MmMapIoSpace it instead.
+  IDT idt;
+  get_idt(&idt);
+  debugPrint("IDT at 0x%x (size %d)\n", (int)idt.entries, (int)idt.length);
+  debugPrint("Replacing IDT entry 0xE: 0x%x (old)\n", (idt.entries[0xE].offset_hi << 16) | idt.entries[0xE].offset_lo);
+  uintptr_t page_fault_isr_addr = (uintptr_t)page_fault_isr;
+  idt.entries[0xE].offset_lo = page_fault_isr_addr & 0xFFFF;
+  idt.entries[0xE].offset_hi = (page_fault_isr_addr >> 16) & 0xFFFF;
+
+for(int i = 0; i <= 0x13; i++) {
+  idt.entries[i].offset_lo = page_fault_isr_addr & 0xFFFF;
+  idt.entries[i].offset_hi = (page_fault_isr_addr >> 16) & 0xFFFF;
+}
+
+#endif
 
 #ifdef XBOX
   printf("-- Running CRT functions ()\n");
