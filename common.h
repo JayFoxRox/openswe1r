@@ -60,8 +60,11 @@ static void* aligned_malloc(size_t alignment, size_t size) {
 #endif
   mprotect(ptr, size, PROT_READ | PROT_WRITE | PROT_EXEC);
 #endif
-  assert(ptr <= 0xFFFFFFFF);
   assert(ptr != NULL);
+#ifdef UC_NATIVE
+  assert(ptr <= 0xFFFFFFFF);
+#endif
+  memset(ptr, 0xFF, size);
   return ptr;
 }
 
