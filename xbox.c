@@ -17,6 +17,11 @@
 
 #include "xbox.h"
 
+//typedef uint8_t Uint8;
+//typedef uint32_t Uint32;
+
+#include "SDL.h"
+
 
 
 
@@ -331,27 +336,27 @@ GLAPI void GLAPIENTRY glViewport (GLint x, GLint y, GLsizei width, GLsizei heigh
 
 
 
-GLAPI void GLAPIENTRY _glActiveTexture(unsigned int a0) {
+GLAPI void GLAPIENTRY _glActiveTexture(GLenum texture) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glAttachShader(int a0) {
+GLAPI void GLAPIENTRY _glAttachShader(GLuint program, GLuint shader) {
   printf("%s\n", __func__);
   return;
 }
 
-void GLAPIENTRY _glBindBuffer(GLenum target, GLuint buffer) {
+GLAPI void GLAPIENTRY _glBindBuffer(GLenum target, GLuint buffer) {
   printf("%s\n", __func__);
   return;
 }
 
-void GLAPIENTRY _glBindVertexArray(int a0) {
+GLAPI void GLAPIENTRY _glBindVertexArray(GLuint array) {
   printf("%s\n", __func__);
   return;
 }
 
-void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
+GLAPI void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
   printf("%s\n", __func__);
   if (target == GL_ELEMENT_ARRAY_BUFFER) {
     element_array_buffer = realloc(element_array_buffer, size);
@@ -359,38 +364,40 @@ void GLAPIENTRY _glBufferData(GLenum target, GLsizeiptr size, const void* data, 
   } else if (target == GL_ARRAY_BUFFER) {
     array_buffer = realloc(array_buffer, size);
     memcpy(array_buffer, data, size);
+  } else if (target == GL_PIXEL_UNPACK_BUFFER) {
+    //FIXME: !!!
   } else {
     assert(false);
   }
   return;
 }
 
-GLAPI void GLAPIENTRY _glClearDepthf(int a0) {
+GLAPI void GLAPIENTRY _glClearDepthf(GLfloat depth) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glCompileShader(int a0) {
+GLAPI void GLAPIENTRY _glCompileShader(GLuint shader) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glCreateProgram(int a0) {
+GLAPI GLuint GLAPIENTRY _glCreateProgram(void) {
+  printf("%s\n", __func__);
+  return 1;
+}
+
+GLAPI GLuint GLAPIENTRY _glCreateShader(GLenum shaderType) {
+  printf("%s\n", __func__);
+  return 1;
+}
+
+GLAPI void GLAPIENTRY _glDebugMessageInsert(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const char *message) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glCreateShader(int a0) {
-  printf("%s\n", __func__);
-  return;
-}
-
-GLAPI void GLAPIENTRY _glDebugMessageInsert(int a0) {
-  printf("%s\n", __func__);
-  return;
-}
-
-GLAPI void GLAPIENTRY _glEnableVertexAttribArray(int a0) {
+GLAPI void GLAPIENTRY _glEnableVertexAttribArray(GLuint index) {
   printf("%s\n", __func__);
   return;
 }
@@ -405,9 +412,19 @@ GLAPI void GLAPIENTRY _glGenVertexArrays(int a0, unsigned int* a1) {
   return;
 }
 
-GLAPI void GLAPIENTRY _glGetAttribLocation(int a0) {
+GLAPI GLint GLAPIENTRY _glGetAttribLocation(GLuint program, const GLchar *name) {
   printf("%s\n", __func__);
-  return;
+  return (GLint)name;
+}
+
+GLAPI void * GLAPIENTRY _glMapBuffer(GLenum target, GLenum access) {
+  printf("%s\n", __func__);
+  return 0;
+}
+
+GLAPI GLboolean GLAPIENTRY _glUnmapBuffer(GLenum target) {
+  printf("%s\n", __func__);
+  return 0;
 }
 
 GLAPI void GLAPIENTRY _glewGetErrorString(int a0) {
@@ -415,7 +432,7 @@ GLAPI void GLAPIENTRY _glewGetErrorString(int a0) {
   return;
 }
 
-GLAPI void GLAPIENTRY _glGetProgramInfoLog(int a0) {
+GLAPI void GLAPIENTRY _glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
   printf("%s\n", __func__);
   return;
 }
@@ -426,42 +443,42 @@ GLAPI void GLAPIENTRY _glGetProgramiv(GLuint program, GLenum pname, GLint* param
   return;
 }
 
-GLAPI void GLAPIENTRY _glGetShaderInfoLog(int a0) {
+GLAPI void GLAPIENTRY _glGetShaderInfoLog(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glGetShaderiv(int a0) {
+GLAPI void GLAPIENTRY _glGetShaderiv(GLuint shader, GLenum pname, GLint *params) {
   printf("%s\n", __func__);
   return;
 }
 
 GLAPI GLint GLAPIENTRY _glGetUniformLocation(GLuint program, const GLchar *name) {
   printf("%s\n", __func__);
-  return name;
+  return (GLint)name;
 }
 
-GLAPI void GLAPIENTRY _glLinkProgram(int a0) {
+GLAPI void GLAPIENTRY _glLinkProgram(GLuint program) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glShaderSource(int a0) {
+GLAPI void GLAPIENTRY _glShaderSource(GLuint shader, GLsizei count, const GLchar * const*string, const GLint *length) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glUniform1f(int a0) {
+GLAPI void GLAPIENTRY _glUniform1f(GLint location, GLfloat v0) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glUniform1i(int a0) {
+GLAPI void GLAPIENTRY _glUniform1i(GLint location, GLint v0) {
   printf("%s\n", __func__);
   return;
 }
 
-GLAPI void GLAPIENTRY _glUniform3f(int a0) {
+GLAPI void GLAPIENTRY _glUniform3f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2) {
   printf("%s\n", __func__);
   return;
 }
@@ -484,7 +501,7 @@ GLAPI void GLAPIENTRY _glUniformMatrix4fv(int a0,  int a1,  unsigned char a2,  c
   return;
 }
 
-GLAPI void GLAPIENTRY _glUseProgram(unsigned int a0) {
+GLAPI void GLAPIENTRY _glUseProgram(GLuint program) {
   printf("%s\n", __func__);
   return;
 }
@@ -531,6 +548,8 @@ GLEW_FUN_EXPORT PFNGLSHADERSOURCEPROC __glewShaderSource = _glShaderSource;
 GLEW_FUN_EXPORT PFNGLCREATEPROGRAMPROC __glewCreateProgram = _glCreateProgram;
 GLEW_FUN_EXPORT PFNGLCREATESHADERPROC __glewCreateShader = _glCreateShader;
 GLEW_FUN_EXPORT PFNGLGETSHADERIVPROC __glewGetShaderiv = _glGetShaderiv;
+GLEW_FUN_EXPORT PFNGLMAPBUFFERPROC __glewMapBuffer = _glMapBuffer;
+GLEW_FUN_EXPORT PFNGLUNMAPBUFFERPROC __glewUnmapBuffer = _glUnmapBuffer;
 
 GLEWAPI GLboolean glewExperimental = GL_FALSE;
 
@@ -572,75 +591,80 @@ int pthread_sigmask(int a0) {
 #if 1 //#ifndef XBOX
 
 
-int SDL_CreateWindow(int a0) {
+SDL_Window* SDL_CreateWindow(const char* title,
+                             int         x,
+                             int         y,
+                             int         w,
+                             int         h,
+                             Uint32      flags) {
   printf("%s\n", __func__);
   return 1;
 }
 
-int SDL_Delay(int a0) {
+void SDL_Delay(Uint32 ms) {
   printf("%s\n", __func__);
-  return 0;
+  return;
 }
 
-int SDL_GetKeyboardState(int a0) {
+const Uint8* SDL_GetKeyboardState(int* numkeys) {
   printf("%s\n", __func__);
   static unsigned char keys[256];
   memset(keys, 0x00, sizeof(keys));
   return keys;
 }
 
-int SDL_GetMouseState(int a0) {
+Uint32 SDL_GetMouseState(int* x, int* y) {
   printf("%s\n", __func__);
   return 0;
 }
 
-int SDL_GetPerformanceCounter(int a0) {
-  printf("%s\n", __func__);
-  return SDL_GetTicks();
-}
-
-int SDL_GetPerformanceFrequency(int a0) {
-  printf("%s\n", __func__);
-  return 1;
-}
-
-int SDL_GetTicks(int a0) {
+Uint32 SDL_GetTicks(void) {
   printf("%s\n", __func__);
   static int t = 0;
   return t++;
 }
 
-int SDL_GL_CreateContext(int a0) {
+Uint64 SDL_GetPerformanceCounter(void) {
+  printf("%s\n", __func__);
+  return SDL_GetTicks();
+}
+
+Uint64 SDL_GetPerformanceFrequency(void) {
   printf("%s\n", __func__);
   return 1;
 }
 
-int SDL_GL_SetAttribute(int a0, int a1) {
+SDL_GLContext SDL_GL_CreateContext(SDL_Window* window) {
+  printf("%s\n", __func__);
+  return 1;
+}
+
+int SDL_GL_SetAttribute(SDL_GLattr attr, int        value) {
   printf("%s\n", __func__);
   return 0;
 }
 
-int SDL_GL_SwapWindow(int a0) {
+void SDL_GL_SwapWindow(SDL_Window* window) {
   printf("%s\n", __func__);
 
   saveBuffer();
 
-  return 0;
+  return;
 }
 
-int SDL_Init(int a0) {
+int SDL_Init(Uint32 flags) {
   printf("%s\n", __func__);
   return 0;
 }
 
-int SDL_PollEvent(int a0) {
+int SDL_PollEvent(SDL_Event* event) {
   printf("%s\n", __func__);
   return 0;
 }
 
-int SDL_ShowWindow(int a0) {
+void SDL_ShowWindow(SDL_Window* window) {
   printf("%s\n", __func__);
-  return 0;
+  return;
 }
 
 #endif
