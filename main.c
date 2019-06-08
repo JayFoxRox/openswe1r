@@ -921,7 +921,7 @@ HACKY_IMPORT_BEGIN(wsprintfA)
   printf("Out: '%s'\n", out);
 HACKY_IMPORT_END()
 
-FILE* handles[10000];
+FILE* handles[4096];
 uint32_t handle_index = 1;
 
 HACKY_IMPORT_BEGIN(CreateFileA)
