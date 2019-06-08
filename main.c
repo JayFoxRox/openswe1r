@@ -2727,7 +2727,7 @@ HACKY_COM_BEGIN(IDirect3D3, 6)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 30);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -2739,7 +2739,7 @@ HACKY_COM_BEGIN(IDirect3D3, 8)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 50);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
 HACKY_COM_END()
