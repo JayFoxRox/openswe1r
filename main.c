@@ -267,7 +267,7 @@ void UnloadSection(Exe* exe, unsigned int sectionIndex) {
 
 
 static void UcTimerHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  printf("Time is %" PRIu64 "\n", SDL_GetTicks());
+  printf("Time is %u\n", (unsigned int)SDL_GetTicks());
 }
 
 // This is strictly for debug purposes, it attempts to dump fscanf (internally used by sscanf too)
@@ -1400,17 +1400,45 @@ HACKY_IMPORT_BEGIN(ExitThread)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+enum {
+  API(IDI_APPLICATION) = 0x7F00
+};
+
+static const char* IconName(Address address) {
+
+  // If this is a pointer (high-order word isn't zero), the string is in memory
+  if ((address & 0xFFFF0000) != 0) {
+    return (const char*)Memory(address);
+  }
+
+  // If this isn't a pointer, the low-order word is a resource identifier
+  uint16_t resource_id = address & 0xFFFF;
+  const char* s;
+  switch(resource_id) {
+  case API(IDI_APPLICATION):
+    s = "<IDI_APPLICATION>";
+    break;
+  default:
+    printf("Unknown icon-name 0x%04X\n", resource_id);
+    s = "<unknown>";
+    assert(false);
+    break;
+  }
+
+  return s;
+}
+
 // Window creation function
 HACKY_IMPORT_BEGIN(LoadIconA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpIconName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
+  hacky_printf("lpIconName 0x%" PRIX32 " ('%s')\n", stack[2], IconName(stack[2]));
   eax = 0; // NULL, pretend we failed
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(LoadCursorA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpCursorName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
+  hacky_printf("lpCursorName 0x%" PRIX32 " ('%s')\n", stack[2], IconName(stack[2]));
   eax = 0; // NULL, pretend we failed
   esp += 2 * 4;
 HACKY_IMPORT_END()
@@ -2062,7 +2090,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
   API(DDCAPS)* halCaps = Memory(stack[2]);
   API(DDCAPS)* swCaps = Memory(stack[3]);
 
-  printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
+  printf("halCaps is %d bytes (known: %zu bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
 
   halCaps->dwCaps = API(DDCAPS_3D) | API(DDCAPS_BLTDEPTHFILL);
   halCaps->dwCaps2 = API(DDCAPS2_CANRENDERWINDOWED);
@@ -2225,7 +2253,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     assert(this->desc.ddpfPixelFormat.dwZBufferBitDepth == 16);
 
     glDepthMask(GL_TRUE);
-    assert(bltfx->dwFillDepth = 0xFFFF);
+    assert(bltfx->dwFillDepth == 0xFFFF);
     glClearDepthf(1.0f); //FIXME!!
     glClear(GL_DEPTH_BUFFER_BIT);
   }
@@ -3727,7 +3755,7 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 // NOTE: This purposely does not map the file into memory for portability
 Exe* LoadExe(const char* path) {
   exe = (Exe*)malloc(sizeof(Exe)); //FIXME: Hack to make this global!
-  memset(exe, 0x00, sizeof(exe));
+  memset(exe, 0x00, sizeof(Exe));
 
   // Load the exe file and skip the DOS header
   exe->f = fopen(path, "rb");

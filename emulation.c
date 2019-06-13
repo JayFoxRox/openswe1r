@@ -74,7 +74,9 @@ typedef struct {
 ThreadContext* threads = NULL; //FIXME: Store pointers to threads instead? (Probably doesn't matter for re-volt)
 
 static void TransferContext(ThreadContext* ctx, bool write) {
-  uc_err(*transfer)(uc_engine*, int, void*) = write ? uc_reg_write : uc_reg_read;
+  typedef uc_err(*TransferFunction)(uc_engine*, int, void*);
+  TransferFunction transfer = write ? (TransferFunction)uc_reg_write : uc_reg_read;
+
   transfer(uc, UC_X86_REG_EIP, &ctx->eip);
   transfer(uc, UC_X86_REG_ESP, &ctx->esp);
   transfer(uc, UC_X86_REG_EBP, &ctx->ebp);
@@ -167,7 +169,7 @@ static void UcTraceHook(void* uc, uint64_t address, uint32_t size, void* user_da
   uc_reg_read(uc, UC_X86_REG_EAX, &eax);
   uc_reg_read(uc, UC_X86_REG_ESI, &esi);
   static uint32_t id = 0;
-  printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %" PRIu64 ")\n", id++, eip, esp, eax, esi, SDL_GetTicks());
+  printf("%7" PRIu32 " TRACE Emulation at 0x%X (ESP: 0x%X); eax = 0x%08" PRIX32 " esi = 0x%08" PRIX32 " (TS: %u)\n", id++, eip, esp, eax, esi, (unsigned int)SDL_GetTicks());
 }
 
 typedef struct {
@@ -550,7 +552,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId++; // 256 kiB per late thread
+  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId; // 256 kiB per late thread
   assert(threadId < 4);
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
@@ -562,6 +564,8 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
   ctx->ebp = 0;
   ctx->sleep = 0;
   PrintContext(ctx);
+
+  return threadId++;
 }
 
 void SleepThread(uint64_t duration) {
