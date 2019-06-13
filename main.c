@@ -267,7 +267,7 @@ void UnloadSection(Exe* exe, unsigned int sectionIndex) {
 
 
 static void UcTimerHook(void* uc, uint64_t address, uint32_t size, void* user_data) {
-  printf("Time is %" PRIu64 "\n", SDL_GetTicks());
+  printf("Time is %u\n", (unsigned int)SDL_GetTicks());
 }
 
 // This is strictly for debug purposes, it attempts to dump fscanf (internally used by sscanf too)
@@ -2090,7 +2090,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 11)
   API(DDCAPS)* halCaps = Memory(stack[2]);
   API(DDCAPS)* swCaps = Memory(stack[3]);
 
-  printf("halCaps is %d bytes (known: %d bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
+  printf("halCaps is %d bytes (known: %zu bytes)\n", halCaps->dwSize, sizeof(API(DDCAPS)));
 
   halCaps->dwCaps = API(DDCAPS_3D) | API(DDCAPS_BLTDEPTHFILL);
   halCaps->dwCaps2 = API(DDCAPS2_CANRENDERWINDOWED);
@@ -2253,7 +2253,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 5)
     assert(this->desc.ddpfPixelFormat.dwZBufferBitDepth == 16);
 
     glDepthMask(GL_TRUE);
-    assert(bltfx->dwFillDepth = 0xFFFF);
+    assert(bltfx->dwFillDepth == 0xFFFF);
     glClearDepthf(1.0f); //FIXME!!
     glClear(GL_DEPTH_BUFFER_BIT);
   }
@@ -3755,7 +3755,7 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 // NOTE: This purposely does not map the file into memory for portability
 Exe* LoadExe(const char* path) {
   exe = (Exe*)malloc(sizeof(Exe)); //FIXME: Hack to make this global!
-  memset(exe, 0x00, sizeof(exe));
+  memset(exe, 0x00, sizeof(Exe));
 
   // Load the exe file and skip the DOS header
   exe->f = fopen(path, "rb");
