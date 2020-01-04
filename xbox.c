@@ -387,6 +387,12 @@ GLAPI void GLAPIENTRY glClearDepth (GLclampd depth) {
   return;
 }
 
+static GLint scissor_x = 0;
+static GLint scissor_y = 0;
+static GLsizei scissor_w = 0;
+static GLsizei scissor_h = 0;
+static bool scissor_enable = false;
+
 GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
   printf("%s\n", __func__);
 
@@ -394,11 +400,25 @@ GLAPI void GLAPIENTRY glClear (GLbitfield mask) {
 
   /* Clear depth & stencil buffers */
 
-  //FIXME: Check flag
-  erase_depth_stencil_buffer(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+  unsigned int x = 0;
+  unsigned int y = 0;
+  unsigned int w = 640;
+  unsigned int h = 480;
+  if (scissor_enable) {
+    x = scissor_x;
+    y = scissor_y;
+    w = scissor_w;
+    h = scissor_h;
+  }
 
-  //FIXME: Check flag
-  pb_fill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff202020); //FIXME: Use proper color
+  if ((mask & GL_DEPTH_BUFFER_BIT) || (mask & GL_STENCIL_BUFFER_BIT)) {
+    //FIXME: Avoid flags collision (where we only want to clear one of them)
+    erase_depth_stencil_buffer(x, y, w, h);
+  }
+
+  if (mask & GL_COLOR_BUFFER_BIT) {
+    pb_fill(x, y, w, h, 0xff202020); //FIXME: Use proper color
+  }
 
   //FIXME: Why?
   while(pb_busy()) {
@@ -440,6 +460,10 @@ GLAPI void GLAPIENTRY glDepthMask (GLboolean flag) {
 
 GLAPI void GLAPIENTRY glDisable (GLenum cap) {
   printf("%s\n", __func__);
+  switch(cap) {
+  case GL_SCISSOR_TEST: scissor_enable = false; break;
+  default: break;
+  }
   return;
 }
 
@@ -874,6 +898,10 @@ while(1);
 
 GLAPI void GLAPIENTRY glEnable (GLenum cap) {
   printf("%s\n", __func__);
+  switch(cap) {
+  case GL_SCISSOR_TEST: scissor_enable = true; break;
+  default: break;
+  }
   return;
 }
 
@@ -907,6 +935,10 @@ GLAPI void GLAPIENTRY glReadPixels (GLint x, GLint y, GLsizei width, GLsizei hei
 
 GLAPI void GLAPIENTRY glScissor (GLint x, GLint y, GLsizei width, GLsizei height) {
   printf("%s\n", __func__);
+  scissor_x = x;
+  scissor_y = y;
+  scissor_w = width;
+  scissor_h = height;
   return;
 }
 
