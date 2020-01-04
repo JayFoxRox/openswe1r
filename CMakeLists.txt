@@ -21,6 +21,8 @@ if(ENET_FOUND)
   )
 endif()
 
+message(${LIBUNICORN_INCLUDE_DIR})
+
 include_directories(SYSTEM
   ${LIBUNICORN_INCLUDE_DIR}
   ${OPENGL_INCLUDE_DIR}
@@ -34,6 +36,7 @@ add_executable(openswe1r
   emulation.c
   export.c
   shader.c
+  alloc.c
 
   dll/kernel32.c
 
@@ -76,30 +79,44 @@ target_include_directories(openswe1r PRIVATE ${CMAKE_BINARY_DIR})
 
 include(package.cmake)
 
-if(USE_VM)
-  target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
+if(USE_NATIVE)
+
   target_sources(openswe1r PUBLIC
-    uc_kvm.c
+    uc_native.c
+    xbox.c
   )
+  target_compile_definitions(openswe1r PUBLIC -DUC_NATIVE -DUC_KVM)
+
+  set_target_properties(openswe1r PROPERTIES COMPILE_FLAGS "-m32 -O0" LINK_FLAGS "-m32 -static-libgcc -O0")
+
 else()
+
+  if(USE_VM)
+    target_compile_definitions(openswe1r PUBLIC -DUC_KVM)
+    target_sources(openswe1r PUBLIC
+      uc_kvm.c
+    )
+  else()
+    target_link_libraries(openswe1r
+      ${LIBUNICORN_LIBRARY}
+    )
+  endif()
+
+  if(ENET_FOUND)
+    target_compile_definitions(openswe1r PUBLIC -DDPLAY_ENET)
+    target_link_libraries(openswe1r
+      ${ENET_LIBRARIES}
+    )
+  endif()
+
   target_link_libraries(openswe1r
-    ${LIBUNICORN_LIBRARY}
+    ${OPENGL_LIBRARIES}
+    ${GLEW_LIBRARIES}
+    ${SDL2_LIBRARY}
+    ${OPENAL_LIBRARY}
   )
 endif()
 
-if(ENET_FOUND)
-  target_compile_definitions(openswe1r PUBLIC -DDPLAY_ENET)
-  target_link_libraries(openswe1r
-    ${ENET_LIBRARIES}
-  )
-endif()
-
-target_link_libraries(openswe1r
-  ${OPENGL_LIBRARIES}
-  ${GLEW_LIBRARIES}
-  ${SDL2_LIBRARY}
-  ${OPENAL_LIBRARY}
-)
 
 if(MSVC)
   # Silence MSVC CRT security warnings

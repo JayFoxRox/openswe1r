@@ -15,7 +15,7 @@
 
 
 typedef struct {
-  void* vtable;
+  API(IUnknown) iunknown;
   ALCdevice *device;
   ALCcontext *context;
 } A3d4;
@@ -32,7 +32,7 @@ typedef struct {
 } API(WAVEFORMATEX);
 
 typedef struct {
-  void* vtable;
+  API(IUnknown) iunknown;
   ALuint al_source;
   ALuint al_buffer;
   API(WAVEFORMATEX) fmt;

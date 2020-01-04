@@ -112,4 +112,10 @@ static void strcpy_ucs2(uint16_t* dest, uint16_t* src) {
 }
 
 
+typedef struct {
+  uint32_t vtable_address;
+  uint32_t instance_size;
+  uint32_t reference_count;
+} API(IUnknown);
+
 #endif

@@ -2,7 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 #include <stdlib.h>
 #include <assert.h>
@@ -443,7 +443,8 @@ uc_err uc_reg_write(uc_engine *uc, int regid, const void *value) {
     assert(false);
   }
 
-sregs.fs.base = 0xB0000000;
+//FIXME: Stolen from tlsAddress in emulation.c
+sregs.fs.base = 0x83100000;
 sregs.fs.limit = 0x1000;
 
   ioctl(u->vcpu_fd, KVM_SET_REGS, &regs);

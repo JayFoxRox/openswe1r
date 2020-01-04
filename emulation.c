@@ -2,7 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the included LICENSE.txt file.
 
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -19,23 +19,43 @@
 #include "emulation.h"
 #include "exe.h"
 
+#ifdef UC_NATIVE
+#ifdef XBOX
+#include <xboxkrnl/xboxkrnl.h>
+#else
+#include <unistd.h>
+#include <sys/mman.h>
+#include <errno.h>
+#endif
+#else
+#include "alloc.h"
+#endif
+
 //FIXME: These are hacks (register when mapping instead!)!
 extern Exe* exe;
 uint8_t* stack = NULL;
 uint8_t* heap = NULL;
 
-static uint32_t gdtAddress = 0xA0000000; //FIXME: Search somehow?!
+static uint32_t gdtAddress = 0x83000000; //FIXME: Search somehow?!
 static uint32_t gdtSize = 31 * sizeof(SegmentDescriptor); //FIXME: 31 came from the UC sample, why?!
 
-static uint32_t tlsAddress = 0xB0000000; //FIXME: No idea where to put this yet
+static uint32_t tlsAddress = 0x83100000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
-static uint32_t stackAddress = 0xC0000000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 16 * 1024 * 1024; // 4 MiB stack should be PLENTY
+static uint32_t stackAddress = 0x83200000; // FIXME: Search free region instead..?
+static uint32_t stackSize = 160 * 1024; // About 140kiB are in use at maximum
 
-#define HEAP_ADDRESS 0x0D000000
+#ifdef XBOX
+#define HEAP_ADDRESS 0x81000000
+#else
+#define HEAP_ADDRESS 0x83400000
+#endif
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
+#ifdef UC_NATIVE
+static uint32_t heapSize = 0x1000; // Dummy page
+#else
+static uint32_t heapSize = 200 * 1024 * 1024; // 16 MiB
+#endif
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
@@ -277,37 +297,77 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   //FIXME: Permissions!
   uc_err err;
   assert(size % ucAlignment == 0);
+#ifdef UC_NATIVE
+#ifdef XBOX
+  void* memory;
+  if(address & 0x80000000) {
+    uint32_t base_address = address & 0x7FFFFFFF;
+    memory = MmAllocateContiguousMemoryEx(size, base_address, base_address + size - 1, 0, PAGE_READWRITE);
+  } else {
+    // We can't move some data, like the EXE sections. However, they are not contiguous memory.
+    // So we can't have GPU resources in them.
+    memory = address;
+    SIZE_T allocated_size = size;
+    NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_COMMIT, PAGE_READWRITE);
+    printf("status was %x when allocating 0x%08X (became 0x%08X), 0x%X bytes (became 0x%X)\n", status, address, (uint32_t)memory, size, allocated_size);
+    assert(status == STATUS_SUCCESS);
+  }
+  printf("got %p == %p (%d bytes)?\n", memory, address, size);
+#else
+  //FIXME: Respect protection
+  Size page_size = sysconf(_SC_PAGE_SIZE);
+  Address check_address = address;
+  while(check_address < (address + size)) {
+    int ret = msync(check_address, page_size, MS_ASYNC);
+    assert((ret == -1) && (errno == ENOMEM));
+    check_address += page_size;
+  }
+  void* memory = mmap(address, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0);
+#endif
+  assert(memory == address);
+#else
   void* memory = aligned_malloc(ucAlignment, size);
+#endif
   memset(memory, 0x00, size);
   err = uc_mem_map_ptr(uc, address, size, UC_PROT_ALL, memory);
   if (err) {
     printf("Failed on uc_mem_map_ptr() with error returned %u: %s\n", err, uc_strerror(err));
+    assert(false);
   }
   //FIXME: Add to mapped memory list
   return memory;
 }
 
 Address Allocate(Size size) {
-  static uint32_t address = HEAP_ADDRESS;
-  uint32_t ret = address;
-  address += size;
+#ifdef UC_NATIVE
+  Address ret = aligned_malloc(0x1000, size);
+#else
+  static bool initialized = false;
+  if (!initialized) {
+    alloc_initialize(heapSize, 0x1000);
+    initialized = true;
+  }
+  uint32_t offset = alloc_allocate(size);
+  Address ret = heapAddress + offset;
+  printf("0x%X + 0x%X = 0x%X\n", heapAddress, offset, ret);
+#endif
+
+  assert(ret != 0);
+
 #if 1
   // Debug memset to detect memory errors
   memset(Memory(ret), 0xDD, size);
-#endif
-  //FIXME: Proper allocator
-
-#if 1
-//FIXME: This is a hack to fix alignment + to avoid too small allocations
-address += 0x1000;
-address &= 0xFFFFF000;
 #endif
 
   return ret;
 }
 
 void Free(Address address) {
-  //FIXME!
+#ifdef UC_NATIVE
+  aligned_free(address);
+#else
+  alloc_free(address - heapAddress);
+#endif
 }
 
 void* Memory(uint32_t address) {
@@ -321,6 +381,7 @@ void* Memory(uint32_t address) {
   }
 
   if (address >= exe->peHeader.imageBase) {
+    uint32_t orig_address = address;
     address -= exe->peHeader.imageBase;
     for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
       PeSection* section = &exe->sections[sectionIndex];
@@ -330,17 +391,109 @@ void* Memory(uint32_t address) {
         return &exe->mappedSections[sectionIndex][offset];
       }
     }
+    address = orig_address;
   }
 
+  if (address == 0) {
+    return NULL;
+  }
+
+#ifdef UC_NATIVE
+  return address;
+#else
+  printf("Unmapped 0x%X\n", address);
+  assert(false);
+#endif
   return NULL;
 }
 
+#ifdef UC_NATIVE
+#include "uc_native.h"
+
+uint32_t host_eip;
+
+#ifndef __stdcall
+#define __stdcall __attribute__((stdcall))
+#endif
+#endif
+
+
 Address CreateHlt() {
-  Address code_address = Allocate(2);
+#ifdef UC_NATIVE
+
+  unsigned int code_size = 20;
+
+#if 0
+  Address code_address = Allocate(20);
+#else
+  static Address buffer;
+  static int buffer_size = 0;
+  if (buffer_size < code_size) {
+    buffer_size = 0x1000;
+    buffer = Allocate(buffer_size);
+  }
+  Address code_address = buffer;
+  buffer += code_size;
+  buffer_size -= code_size;
+#endif
+  
+
+  extern void(__stdcall __return_to_host_entry)() asm("__return_to_host_entry");
+  asm("jmp continue\n"
+      ".global __return_to_host_entry\n"
+      "__return_to_host_entry:\n"
+
+      // Keep a backup of the real guest ESP
+      "mov %%esp, guest_registers_esp\n"
+
+      // Fill guest_registers
+      "mov guest_registers, %%esp\n"
+      "add $36, %%esp\n"
+      "pushf\n"
+      "pusha\n"
+
+      // Fill guest_registers_fpu
+      "fxsave guest_registers_fpu\n"
+
+      // Move to host fs
+      "mov host_fs, %%eax\n"
+      "mov %%eax, %%fs:0\n"
+
+      // Move to host space
+      "mov host_esp, %%esp\n"
+      "popa\n"
+      "popf\n"
+      "fxrstor host_registers_fpu\n"
+
+#ifdef XBOX
+      // Re-enable interrupts
+      "sti\n"
+#endif
+
+      "jmp return_to_host\n"
+      "continue:\n":::"eax", "esp", "memory");
+
   uint8_t* code = Memory(code_address);
+  *code++ = 0x90; // Marker
+
+  *code++ = 0xc7; // mov code_address, [guest_eip]
+  *code++ = 0x05;
+  *(uint32_t*)code = (uintptr_t)&host_eip;
+  code += 4;
+  *(uint32_t*)code = code_address + 2;
+  code += 4;
+
+  *code++ = 0xE9; // jmp __return_to_host
+  *(uint32_t*)code = (uintptr_t)__return_to_host_entry - (uintptr_t)code - 4;
+  code += 4;
+#else
+  Address code_address = Allocate(3);
+  uint8_t* code = Memory(code_address);
+  *code++ = 0x90; // Marker
   *code++ = 0xF4; // HLT
   //FIXME: Are changes to regs even registered here?!
   *code++ = 0xC3; // End block with RET
+#endif
   return code_address;
 }
 
@@ -478,13 +631,13 @@ void InitializeEmulation() {
   uc_reg_write(uc, UC_X86_REG_EDX, &edx);
 #endif
 
-  // Map and set TLS (not exposed via flat memory)
-  uint8_t* tls = MapMemory(tlsAddress, tlsSize, true, true, false);
-  memset(tls, 0xBB, tlsSize);
-
   // Allocate a heap
   heap = MapMemory(heapAddress, heapSize, true, true, true);
   memset(heap, 0xAA, heapSize);
+
+  // Map and set TLS (not exposed via flat memory)
+  uint8_t* tls = MapMemory(tlsAddress, tlsSize, true, true, false);
+  memset(tls, 0xBB, tlsSize);
 }
 
 void SetTracing(bool enabled) {
@@ -550,8 +703,9 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId++; // 256 kiB per late thread
-  assert(threadId < 4);
+  uint32_t esp = stackAddress + stackSize - 1024; // We give 1k of headroom
+  assert(threadId == 0);
+  threadId++;
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
   ThreadContext* ctx = &threads[threadCount - 1];
@@ -578,6 +732,29 @@ static unsigned int GetThreadCount() {
   return threadCount;
 }
 
+static void memory_statistics() {
+#if 0 //#ifdef XBOX
+  printf("           Memory statistics:\n");
+  MM_STATISTICS ms;
+  ms.Length = sizeof(MM_STATISTICS);
+  MmQueryStatistics(&ms);
+	#define PRINT(stat) printf("           - " #stat ": %d\n", ms.stat);
+  PRINT(TotalPhysicalPages)
+  PRINT(AvailablePages)
+  PRINT(VirtualMemoryBytesCommitted)
+  PRINT(VirtualMemoryBytesReserved)
+  PRINT(CachePagesCommitted)
+  PRINT(PoolPagesCommitted)
+  PRINT(StackPagesCommitted)
+  PRINT(ImagePagesCommitted)
+  #undef PRINT
+
+  uint32_t esp;
+  asm("mov %%esp, %%eax":"=a"(esp));
+  printf("           - Stack: 0x%X\n", esp);
+#endif
+}
+
 void RunEmulation() {
   uc_err err;
 
@@ -601,6 +778,12 @@ void RunEmulation() {
     TransferContext(ctx, true);
 
     while(true) {
+
+#ifdef XBOX
+      //debugClearScreen();
+#endif
+      memory_statistics();
+
       err = uc_emu_start(uc, ctx->eip, 0, 0, 0);
 
       // Finish profiling, if we have partial data
@@ -622,12 +805,17 @@ void RunEmulation() {
 
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
 
-      Address hltAddress = ctx->eip - 1;
-      assert(*(uint8_t*)Memory(hltAddress) == 0xF4);
+      Address hltAddress = ctx->eip - 2;
+      assert(*(uint8_t*)Memory(hltAddress) == 0x90);
 
       HltHandler* hltHandler = findHltHandler(hltAddress);
       if(hltHandler != NULL) {
+#ifndef XBOX
+        printf("Running handler for '%s'\n",  hltHandler->user_data);
+#endif
         hltHandler->callback(uc, hltHandler->address, hltHandler->user_data);
+      } else {
+        assert(false);
       }
 
       //Hack: Manually transfers EIP (might have been changed in callback)

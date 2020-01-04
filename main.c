@@ -3,7 +3,11 @@
 // Refer to the included LICENSE.txt file.
 
 #include "main.h"
+#ifndef XBOX
 #include "app_version.h"
+#else
+#define APP_VERSION_STRING "<APP_VERSION_STRING>"
+#endif
 
 #include <string.h>
 #include <stdio.h>
@@ -12,15 +16,40 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "descriptor.h"
 #include "emulation.h"
 #include "exe.h"
 
+#ifndef XBOX
 //FIXME: Alternative for non-posix OS!
 #include <time.h>
+#endif
 
+#ifdef XBOX
+#include "xbox.h"
+#endif
+
+
+//FIXME: REMOVE THIS BLOCK! Only used during development
+#ifdef XBOX
+#include <hal/debug.h>
+#define XboxHackyDebugPrint(fmt, ...) \
+  do { \
+    char buf[4096]; \
+    sprintf(buf, fmt, __VA_ARGS__); \
+    printf("%s", buf); \
+    /*debugPrint("%s", buf);*/ \
+  } while(0);
+#else
+#define XboxHackyDebugPrint(fmt, ...)
+#endif
+#ifdef XBOX
+#include <pbkit/pbkit.h>
+#include <hal/video.h>
+#endif
 
 #include "SDL.h"
 static SDL_Window* sdlWindow;
@@ -47,6 +76,9 @@ void AddExport(const char* name, void* callback, Address address) {
   Export* export = &exports[exportCount];
   export->name = malloc(strlen(name) + 1);
   strcpy((char*)export->name, name);
+#if 0
+  printf("    Stored '%s' at %p\n", export->name, export->name);
+#endif
   export->callback = callback;
   export->address = 0;
   exportCount++;
@@ -89,18 +121,51 @@ uint32_t tls[1000] = {0};
 
 #include "windows.h" // Hack while exports are not ready
 // HACK:
-#include <unicorn/unicorn.h>
+#include "unicorn.h"
 
 static void UnknownImport(void* uc, Address address, void* user_data);
 Address CreateInterface(const char* name, unsigned int slotCount) {
   //FIXME: Unsure about most terminology / inner workings here
-  Address interfaceAddress = Allocate(1000); //FIXME: Size of object
-  Address vtableAddress = Allocate(4 * slotCount);
+  Size object_size = 1000;
+  static int objectcount = 0;
+  printf("objectcount: %d\n", objectcount++);
+  Address interfaceAddress = Allocate(object_size); //FIXME: Size of object
+  Address vtableAddress = Allocate(4 * slotCount + 32 * slotCount);
+  assert(vtableAddress != 0);
+
+#if 1
+XboxHackyDebugPrint("FOO B\n");
+  static Address IDirectDrawSurface4 = 0;
+  static Address IDirect3DTexture2 = 0;
+  if (!strcmp(name, "IDirectDrawSurface4")) {
+    assert(slotCount == 50);
+    if (IDirectDrawSurface4 == 0) {
+      IDirectDrawSurface4 = vtableAddress;
+    } else {
+      Free(vtableAddress);
+      vtableAddress = IDirectDrawSurface4;
+    }
+  } else if (!strcmp(name, "IDirect3DTexture2")) {
+    assert(slotCount == 10);
+    if (IDirect3DTexture2 == 0) {
+      IDirect3DTexture2 = vtableAddress;
+    } else {
+      Free(vtableAddress);
+      vtableAddress = IDirect3DTexture2;
+    }
+  }
+  assert(vtableAddress != 0);
+XboxHackyDebugPrint("FOO E\n");
+#endif
+
+  char* slotNames = Memory(vtableAddress + 4 * slotCount);
   uint32_t* vtable = (uint32_t*)Memory(vtableAddress);
+
   for(unsigned int i = 0; i < slotCount; i++) {
     // Point addresses to themself
-    char* slotName = malloc(128);
+    char* slotName = &slotNames[i * 32];
     sprintf(slotName, "%s__%d", name, i);
+    assert(strlen(slotName) < 32);
     Export* export = LookupExportByName(slotName);
 
     Address hltAddress;
@@ -119,8 +184,12 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
     }
     vtable[i] = hltAddress;
   }
+
   // First element in object is pointer to vtable
-  *(uint32_t*)Memory(interfaceAddress) = vtableAddress;
+  API(IUnknown)* iunknown = Memory(interfaceAddress);
+  iunknown->vtable_address = vtableAddress;
+  iunknown->instance_size = object_size;
+  iunknown->reference_count = 1;
 
   return interfaceAddress;
 }
@@ -128,6 +197,28 @@ Address CreateInterface(const char* name, unsigned int slotCount) {
 
 #endif
 
+
+static void AddRefInterface(Address address) {
+  API(IUnknown)* this = Memory(address);
+
+  // Keep track that the new surface is being used
+  this->reference_count++;
+}
+
+static void ReleaseInterface(Address address) {
+  API(IUnknown)* this = Memory(address);
+
+  // Remove reference
+  this->reference_count--;
+
+  // Check if the last user is gone now
+  if (this->reference_count == 0) {
+    printf("Free interface!\n");
+
+    //FIXME: Ref-counting is still broken.. or something
+    //Free(address);
+  }
+}
 
 
 
@@ -243,7 +334,8 @@ void LoadSection(Exe* exe, unsigned int sectionIndex) {
   PeSection* section = &exe->sections[sectionIndex];
 
   // Map memory for section
-  uint8_t* mem = (uint8_t*)aligned_malloc(0x1000, section->virtualSize);
+  uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
+  uint8_t* mem = MapMemory(base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
 
   // Read data from exe and fill rest of space with zero
   fseek(exe->f, section->rawAddress, SEEK_SET);
@@ -517,9 +609,17 @@ HACKY_IMPORT_BEGIN(HeapAlloc)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("dwBytes 0x%" PRIX32 "\n", stack[3]);
-  eax = Allocate(stack[3]);
+
+  //FIXME: The game has a bug, where it allocates 1 byte too few in at least
+  //       one instance. The error will be at 0x44ae32 in the webdemo
+  uint32_t size = stack[3];
+
+  eax = Allocate(size);
+
+  assert((stack[2] == 0x0) || (stack[2] == 0x8));
+
   //FIXME: Only do this if flag is set..
-  memset(Memory(eax), 0x00, stack[3]);
+  memset(Memory(eax), 0x00, size);
   esp += 3 * 4;
 HACKY_IMPORT_END()
 
@@ -678,7 +778,12 @@ HACKY_IMPORT_BEGIN(LCMapStringW)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(GetModuleHandleA)
-  hacky_printf("lpModuleName 0x%" PRIX32 " ('%s')\n", stack[1], Memory(stack[1]));
+  char* lpModuleName = Memory(stack[1]);
+  hacky_printf("lpModuleName 0x%" PRIX32, stack[1]);
+  if (lpModuleName != NULL) {
+    hacky_printf(" ('%s')", lpModuleName);
+  }
+  hacky_printf("\n");
   eax = 999;
   esp += 1 * 4;
 HACKY_IMPORT_END()
@@ -783,7 +888,12 @@ HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(timeGetTime)
   //FIXME: Avoid overflow?
-  eax = SDL_GetTicks();
+  //eax = SDL_GetTicks();
+
+  //FIXME: Undo!
+  static uint32_t t = 0;
+  eax = t++;
+
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(GetLastError)
@@ -792,7 +902,7 @@ HACKY_IMPORT_BEGIN(GetLastError)
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(TlsGetValue)
-  silent = true;
+  silent = false;
   if (!silent) {
     hacky_printf("dwTlsIndex 0x%" PRIX32 "\n", stack[1]);
   }
@@ -906,7 +1016,7 @@ HACKY_IMPORT_BEGIN(wsprintfA)
   printf("Out: '%s'\n", out);
 HACKY_IMPORT_END()
 
-FILE* handles[10000];
+FILE* handles[4096];
 uint32_t handle_index = 1;
 
 HACKY_IMPORT_BEGIN(CreateFileA)
@@ -963,6 +1073,11 @@ HACKY_IMPORT_BEGIN(HeapFree)
   hacky_printf("hHeap 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("dwFlags 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("lpMem 0x%" PRIX32 "\n", stack[3]);
+
+  assert(stack[2] == 0x0);
+
+  Free(stack[3]);
+
   eax = 1; // nonzero if succeeds
   esp += 3 * 4;
 HACKY_IMPORT_END()
@@ -999,11 +1114,22 @@ HACKY_IMPORT_BEGIN(CoCreateInstance)
   hacky_printf("ppv 0x%" PRIX32 "\n", stack[5]);
   const API(CLSID)* clsid = (const API(CLSID)*)Memory(stack[1]);
   char clsidString[1024];
+  hacky_printf("pre sprintf\n");
   sprintf(clsidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
           clsid->Data1, clsid->Data2, clsid->Data3,
           clsid->Data4[0], clsid->Data4[1], clsid->Data4[2], clsid->Data4[3],
           clsid->Data4[4], clsid->Data4[5], clsid->Data4[6], clsid->Data4[7]);
+clsidString[50] = '\0';
+
+hacky_printf("post sprintf / pre printf\n");
+hacky_printf("<<< (%d bytes)\n", strlen(clsidString));
+hacky_printf(clsidString);
+hacky_printf("\n---\n");
+hacky_printf("  (read clsid: {%s})\n", clsidString);
+hacky_printf(">>>\n");
+
   printf("  (read clsid: {%s})\n", clsidString);
+hacky_printf("post printf\n");
   const API(IID)* iid = (const API(IID)*)Memory(stack[4]);
   char iidString[1024];
   sprintf(iidString, "%08" PRIX32 "-%04" PRIX16 "-%04" PRIX16 "-%02" PRIX8 "%02" PRIX8 "-%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8 "%02" PRIX8,
@@ -1055,7 +1181,7 @@ HACKY_IMPORT_BEGIN(DirectDrawCreate)
   hacky_printf("lpGUID 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("lplpDD 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[3]);
-  *(Address*)Memory(stack[2]) = CreateInterface("IDirectDraw4", 200);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirectDraw4", 30);
   eax = 0; // DD_OK
   esp += 3 * 4;
 HACKY_IMPORT_END()
@@ -1307,7 +1433,12 @@ HACKY_IMPORT_BEGIN(CreateEventA)
   hacky_printf("lpEventAttributes 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("bManualReset 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("bInitialState 0x%" PRIX32 "\n", stack[3]);
-  hacky_printf("lpName 0x%" PRIX32 " ('%s')\n", stack[4], (char*)Memory(stack[4]));
+  hacky_printf("lpName 0x%" PRIX32, stack[4]);
+  char* lpName = (char*)Memory(stack[4]);
+  if (lpName != NULL) {
+    hacky_printf(" ('%s')", lpName);
+  }
+  hacky_printf("\n");
 
   eax = 5551337; // HANDLE
   esp += 4 * 4;
@@ -1400,17 +1531,34 @@ HACKY_IMPORT_BEGIN(ExitThread)
   esp += 1 * 4;
 HACKY_IMPORT_END()
 
+enum {
+  API(IDI_APPLICATION) = 0x7F00
+};
+
+const char* IconName(Address address) {
+  const char* s;
+  switch(address) {
+  case API(IDI_APPLICATION):
+    s = "<IDI_APPLICATION>";
+    break;
+  default:
+    s = (const char*)Memory(address);
+    break;
+  }
+  return s;
+}
+
 // Window creation function
 HACKY_IMPORT_BEGIN(LoadIconA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpIconName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
+  hacky_printf("lpIconName 0x%" PRIX32 " ('%s')\n", stack[2], IconName(stack[2]));
   eax = 0; // NULL, pretend we failed
   esp += 2 * 4;
 HACKY_IMPORT_END()
 
 HACKY_IMPORT_BEGIN(LoadCursorA)
   hacky_printf("hInstance 0x%" PRIX32 "\n", stack[1]);
-  hacky_printf("lpCursorName 0x%" PRIX32 " ('%s')\n", stack[2], (char*)Memory(stack[2]));
+  hacky_printf("lpCursorName 0x%" PRIX32 " ('%s')\n", stack[2], IconName(stack[2]));
   eax = 0; // NULL, pretend we failed
   esp += 2 * 4;
 HACKY_IMPORT_END()
@@ -1906,7 +2054,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 0)
     assert(false);
   }
 
-  *(Address*)Memory(stack[3]) = CreateInterface(name, 200);
+  *(Address*)Memory(stack[3]) = CreateInterface(name, 30);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -1925,7 +2073,7 @@ HACKY_COM_BEGIN(IDirectDraw4, 5)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  *(Address*)Memory(stack[4]) = CreateInterface("IDirectDrawPalette", 200);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirectDrawPalette", 10);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
 HACKY_COM_END()
@@ -1971,14 +2119,16 @@ enum {
 
   if (desc->ddsCaps.dwCaps & API(DDSCAPS_TEXTURE)) {
     // FIXME: Delay this until the interface is queried the first time?!
-    surface->texture = CreateInterface("IDirect3DTexture2", 20);
+    surface->texture = CreateInterface("IDirect3DTexture2", 10);
+    surface->pbo = 0;
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
     texture->surface = surfaceAddress;
     glGenTextures(1, &texture->handle);
     printf("GL handle is %d\n", texture->handle);
   } else {
     //FIXME: only added to catch bugs, null pointer should work
-    surface->texture = CreateInterface("invalid", 200);
+    surface->texture = CreateInterface("invalid", 10);
+    surface->pbo = 0;
 
     //FIXME: WTF is this shit?!
     API(Direct3DTexture2)* texture = (API(Direct3DTexture2)*)Memory(surface->texture);
@@ -2153,6 +2303,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 0)
          iid->Data4[4], iid->Data4[5], iid->Data4[6], iid->Data4[7]);
   if (iid->Data1 == 0x93281502) { //FIXME: Check for full GUID (Direct3DTexture2)
     printf("Returning texture 0x%" PRIX32 "\n", this->texture);
+
+    AddRefInterface(this->texture);
+
     *(Address*)Memory(stack[3]) = this->texture;
   } else {
     assert(false);
@@ -2164,6 +2317,9 @@ HACKY_COM_END()
 // IDirectDrawSurface4 -> STDMETHOD_(ULONG,AddRef) (THIS)  PURE; // 1
 HACKY_COM_BEGIN(IDirectDrawSurface4, 1)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  AddRefInterface(stack[1]);
+
   eax = 1; // New reference count
   esp += 1 * 4;
 HACKY_COM_END()
@@ -2171,6 +2327,13 @@ HACKY_COM_END()
 // IDirectDrawSurface4 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirectDrawSurface4, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  API(DirectDrawSurface4)* this = (API(DirectDrawSurface4)*)Memory(stack[1]);
+  Address texture = this->texture;
+
+  ReleaseInterface(stack[1]);
+  ReleaseInterface(texture);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
@@ -2179,6 +2342,9 @@ HACKY_COM_END()
 HACKY_COM_BEGIN(IDirectDrawSurface4, 3)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
+
+  AddRefInterface(stack[2]);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 2 * 4;
 HACKY_COM_END()
@@ -2240,6 +2406,8 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 8)
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
 
+  ReleaseInterface(stack[3]);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -2282,6 +2450,7 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 12)
     surface->desc.ddpfPixelFormat.dwRGBBitCount = 16;
 
     surface->texture = 0;
+    surface->pbo = 0;
     *(Address*)Memory(stack[3]) = surfaceAddress;
   }
   //FIXME: Used to retrieve surface for mipmaps?!
@@ -2336,9 +2505,20 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   //Hack: Part 1: check if we already have this surface in RAM
   if (this->desc.lpSurface == 0) {
     this->desc.lpSurface = Allocate(this->desc.dwHeight * this->desc.lPitch);
-    memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
   }
 
+  // Start a clean surface, or load it from PBO, if available
+  if (this->pbo == 0) {
+    memset(Memory(this->desc.lpSurface), 0x77, this->desc.dwHeight * this->desc.lPitch);
+  } else {
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, this->pbo);
+    void* ptr = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_READ_ONLY);
+    if (ptr != NULL) { //FIXME: Just assert this!
+      memcpy(Memory(this->desc.lpSurface), ptr, this->desc.dwHeight * this->desc.lPitch);
+      glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  }
 
   if (this->desc.ddsCaps.dwCaps & API(DDSCAPS_ZBUFFER)) {
     assert(this->desc.lPitch == 2 * this->desc.dwWidth);
@@ -2370,7 +2550,9 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 25)
   API(DDSURFACEDESC2)* desc = Memory(stack[3]);
   memcpy(desc, &this->desc, sizeof(API(DDSURFACEDESC2)));
   
+#if 0
   printf("%d x %d (pitch: %d); bpp = %d; at 0x%08X\n", desc->dwWidth, desc->dwHeight, desc->lPitch, desc->ddpfPixelFormat.dwRGBBitCount, desc->lpSurface);
+#endif
 #if 0
   desc->dwWidth = 16;
   desc->dwHeight = 16;
@@ -2411,19 +2593,25 @@ HACKY_COM_BEGIN(IDirectDrawSurface4, 32)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  if (this->pbo == 0) {
+    glGenBuffers(1, &this->pbo);
+  }
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, this->pbo);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, desc->dwHeight * desc->lPitch, Memory(desc->lpSurface), GL_STATIC_DRAW);
   if (desc->ddpfPixelFormat.dwRGBBitCount == 32) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, Memory(desc->lpSurface));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
   } else {
     if (desc->ddpfPixelFormat.dwRGBAlphaBitMask == 0x8000) {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, NULL);
     } else {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, Memory(desc->lpSurface));
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, desc->dwWidth, desc->dwHeight, 0, GL_BGRA, GL_UNSIGNED_SHORT_4_4_4_4_REV, NULL);
     }
   }
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, previousTexture);
 
 //Hack: part 2: don't free this to keep data in RAM. see lock for part 1
-#if 0
+#if 1
   Free(desc->lpSurface);
   desc->lpSurface = 0;
 #endif
@@ -2575,7 +2763,7 @@ HACKY_COM_BEGIN(IDirect3D3, 6)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
   hacky_printf("a 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
-  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 200);
+  *(Address*)Memory(stack[2]) = CreateInterface("IDirect3DViewport3", 30);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
 HACKY_COM_END()
@@ -2587,7 +2775,7 @@ HACKY_COM_BEGIN(IDirect3D3, 8)
   hacky_printf("b 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("c 0x%" PRIX32 "\n", stack[4]);
   hacky_printf("d 0x%" PRIX32 "\n", stack[5]);
-  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 200);
+  *(Address*)Memory(stack[4]) = CreateInterface("IDirect3DDevice3", 50);
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
 HACKY_COM_END()
@@ -3009,11 +3197,13 @@ HACKY_COM_BEGIN(IDirect3DDevice3, 25)
       //FIXME: assert(false) once this runs faster
       break;
   }
+#if 0
   printf("Matrix %d:\n", a);
   printf("  %f\t%f\t%f\t%f\n", m[ 0], m[ 1], m[ 2], m[ 3]);
   printf("  %f\t%f\t%f\t%f\n", m[ 4], m[ 5], m[ 6], m[ 7]);
   printf("  %f\t%f\t%f\t%f\n", m[ 8], m[ 9], m[10], m[11]);
   printf("  %f\t%f\t%f\t%f\n", m[12], m[13], m[14], m[15]);
+#endif
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 3 * 4;
@@ -3157,6 +3347,9 @@ HACKY_COM_BEGIN(IDirect3DTexture2, 0)
   if (!strcmp(iidString, "0B2B8630-AD35-11D0-8EA6-00609797EA5B")) {
     API(Direct3DTexture2)* this = Memory(stack[1]);
     *(Address*)Memory(stack[3]) = this->surface;
+
+    AddRefInterface(this->surface);
+
   } else {
     assert(false);
   }
@@ -3169,6 +3362,9 @@ HACKY_COM_END()
 // IDirect3DTexture2 -> STDMETHOD_(ULONG,Release)       (THIS) PURE; //2
 HACKY_COM_BEGIN(IDirect3DTexture2, 2)
   hacky_printf("p 0x%" PRIX32 "\n", stack[1]);
+
+  ReleaseInterface(stack[1]);
+
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 1 * 4;
 HACKY_COM_END()
@@ -3403,7 +3599,9 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
   UpdateKeyboardState();
   uint32_t* count = (uint32_t*)Memory(stack[4]);
   unsigned int max_count = *count;
+#if 0
   printf("max count is %d\n", max_count);
+#endif
   *count = 0;
   unsigned int objectSize = stack[2];
   assert(objectSize == sizeof(API(DIDEVICEOBJECTDATA)));
@@ -3421,7 +3619,9 @@ HACKY_COM_BEGIN(IDirectInputDeviceA, 10)
     }
   }
   memcpy(previousState, keyboardState, sizeof(keyboardState));
+#if 0
   printf("returning %d entries\n", *count);
+#endif
 
   eax = 0; // FIXME: No idea what this expects to return..
   esp += 5 * 4;
@@ -3535,7 +3735,7 @@ HACKY_COM_BEGIN(IDirectInputA, 3)
   hacky_printf("rguid 0x%" PRIX32 "\n", stack[2]);
   hacky_printf("lpIDD 0x%" PRIX32 "\n", stack[3]);
   hacky_printf("pUnkOuter 0x%" PRIX32 "\n", stack[4]);
-  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 200);
+  *(Address*)Memory(stack[3]) = CreateInterface("IDirectInputDeviceA", 20);
   eax = 0; // HRESULT -> non-negative means success
   esp += 4 * 4;
 HACKY_COM_END()
@@ -3727,7 +3927,7 @@ static void UnknownImport(void* uc, Address address, void* user_data) {
 // NOTE: This purposely does not map the file into memory for portability
 Exe* LoadExe(const char* path) {
   exe = (Exe*)malloc(sizeof(Exe)); //FIXME: Hack to make this global!
-  memset(exe, 0x00, sizeof(exe));
+  memset(exe, 0x00, sizeof(Exe));
 
   // Load the exe file and skip the DOS header
   exe->f = fopen(path, "rb");
@@ -3864,7 +4064,7 @@ Exe* LoadExe(const char* path) {
           sprintf(label, "<%s@%d>", name, ordinal);
         } else {
           API(IMAGE_IMPORT_BY_NAME)* importByName = Memory(exe->peHeader.imageBase + importByNameAddress);
-          printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' ..", thunkAddress, importByName->hint, importByName->name);
+          printf("  0x%" PRIX32 ": 0x%" PRIX16 " '%s' (%p) ..", thunkAddress, importByName->hint, importByName->name, importByName->name);
           label = strdup(importByName->name);
         }
 
@@ -3959,20 +4159,6 @@ void UnloadExe(Exe* exe) {
 //FIXME: Abstract exe mapping and context creation from emu kickoff
 void RunX86(Exe* exe) {
 
-  // Map the important exe parts into emu memory
-  for(unsigned int sectionIndex = 0; sectionIndex < exe->coffHeader.numberOfSections; sectionIndex++) {
-    PeSection* section = &exe->sections[sectionIndex];
-    void** mappedSection = (void**)&exe->mappedSections[sectionIndex];
-    if (*mappedSection != NULL) {
-      uint32_t base = exe->peHeader.imageBase + section->virtualAddress;
-      printf("Mapping 0x%" PRIX32 " - 0x%" PRIX32 "\n", base, base + section->virtualSize - 1);
-      void* relocatedMappedSection = MapMemory(base, AlignUp(section->virtualSize, exe->peHeader.sectionAlignment), true, true, true);
-      memcpy(relocatedMappedSection, *mappedSection, section->virtualSize);
-      aligned_free(*mappedSection);
-      *mappedSection = relocatedMappedSection;
-    }
-  }
-
   //FIXME: Schedule a virtual main-thread
   printf("Emulation starting\n");
   CreateEmulatedThread(exe->peHeader.imageBase + exe->peHeader.addressOfEntryPoint);
@@ -3981,7 +4167,237 @@ void RunX86(Exe* exe) {
   CleanupEmulation();
 }
 
+#ifdef XBOX
+
+
+typedef struct {
+  union {
+    uint32_t edi;
+    uint16_t di;
+  };
+  union {
+    uint32_t esi;
+    uint16_t si;
+  };
+  uint32_t ebp;
+  uint32_t _esp;
+  union {
+    uint32_t ebx;
+    struct {
+      union {
+        uint16_t bx;
+        struct {
+          uint8_t bl, bh;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t edx;
+    struct {
+      union {
+        uint16_t dx;
+        struct {
+          uint8_t dl, dh;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t ecx;
+    struct {
+      union {
+        uint16_t cx;
+        struct {
+          uint8_t cl, ch;
+        };
+      };
+    };
+  };
+  union {
+    uint32_t eax;
+    struct {
+      union {
+        uint16_t ax;
+        struct {
+          uint8_t al, ah;
+        };
+      };
+    };
+  };
+} __attribute__((packed)) Registers;
+
+typedef struct {
+  uint32_t error_code;
+  uint32_t eip;
+  uint16_t cs;
+  uint16_t _pad;
+  uint32_t eflags;
+} __attribute__((packed)) TrapFrame;
+
+void __stdcall page_fault_handler(uint32_t cr2, TrapFrame* trap_frame, Registers* registers) {
+
+  // This is an interrupt handler, so be careful with what you do.
+  // There shouldn't be any float math in here, and you should respect
+  // the IRQL requirements!
+
+  //FIXME: Hardware interrupts are still enabled.
+  //       We need to ensure that no hardware interrupt handler comes in,
+  //       and triggers this handler again?
+
+
+  // Print debug information if remapped address will trigger the same error
+  debugPrint("\n");
+
+  debugPrint("Illegal access: CR2=0x%x, CS=0x%x, EIP=0x%x, EFLAGS=0x%x, error-code=0x%x", cr2, trap_frame->cs, trap_frame->eip, trap_frame->eflags, trap_frame->error_code);
+  debugPrint(" EAX=0x%x, ECX=0x%x\n", registers->eax, registers->ecx);
+
+  // Get access to instruction bytes
+  uint8_t* instruction = (uint8_t*)trap_frame->eip;
+
+  debugPrint("Instruction:");
+  for(unsigned int i = 0; i < 16; i++) {
+    debugPrint(" %x%x", instruction[i] >> 4, instruction[i] & 0xF);
+  }
+  debugPrint("\n");
+
+  while(true);
+}
+
+// This handler will be called for page faults
+void __stdcall page_fault_isr(void);
+asm("_page_fault_isr@0:\n"
+
+  // Disable interrupts
+  "cli\n"
+
+  // Set stack direction
+  "cld\n"
+
+  // Keep a copy of all registers
+  "pusha\n"
+
+  // Get pointer to all regs (top of stack); push it
+  "mov %esp, %eax\n"
+  "push %eax\n"
+
+  // Above the regs (32 bytes), there's the trap frame; push it
+  "add $32, %eax\n"
+  "push %eax\n"
+
+  // Now retrieve the address that triggered the page fault; push it
+  "movl %cr2, %eax\n"
+  "push %eax\n"
+
+  // Call the C handler
+  "call _page_fault_handler@12\n"
+
+  // Retrieve the original registers again
+  "popa\n"
+
+  // Re-enable interrupts
+  "sti\n"
+
+  // Pop error code and return from interrupt
+  "add $4, %esp\n"
+  "iret\n"
+); //FIXME: Can this be relocated?!
+
+typedef struct {
+  uint16_t offset_lo;
+  uint16_t selector;
+  uint8_t zero;
+  uint8_t type_attr;
+  uint16_t offset_hi;
+} __attribute__((packed)) IDTEntry;
+
+typedef struct {
+  uint16_t length;
+  IDTEntry* entries;
+} __attribute__((packed)) IDT;
+
+void __stdcall get_idt(IDT* idt);
+asm("_get_idt@4:\n"
+  "mov +4(%esp), %eax\n"
+  "sidtl (%eax)\n"
+  "retn $4\n"
+);
+
+#endif
+
+#ifdef XBOX
+__attribute__((constructor(101))) static void reserve_memory() {
+  // Reserve the space for the EXE
+  PVOID memory = 0x00400000;
+  SIZE_T allocated_size = 0x00C00000;
+  NTSTATUS status = NtAllocateVirtualMemory(&memory, 0, &allocated_size, MEM_RESERVE, PAGE_READWRITE);
+  assert(status == STATUS_SUCCESS);
+}
+#endif
+
+#ifdef XBOX
+__attribute__((constructor(102))) static void start_log() {
+  // Clear log
+  FILE* f = freopen("log.txt", "wb", stdout);
+  if (f == NULL) {
+    debugPrint("Failed to open log.txt\n");
+  }
+}
+#endif
+
 int main(int argc, char* argv[]) {
+#ifdef XBOX
+
+  // Set display mode (16bpp to save memory)
+  //FIXME: Temporarily switched to 32bpp, as I got weird issues at 16bpp
+  XVideoSetMode(640, 480, 32, REFRESH_DEFAULT); 
+
+#if 1
+  // We consume a lot of memory, so we need to claim the framebuffer
+  size_t fb_size = 640 * 480 * 4;
+  extern uint8_t* _fb;
+  _fb = (uint8_t*)MmAllocateContiguousMemoryEx(fb_size, 0, 0xFFFFFFFF, 0x1000, PAGE_READWRITE | PAGE_WRITECOMBINE);
+  memset(_fb, 0x00, fb_size);
+#define _PCRTC_START				0xFD600800
+  *(unsigned int*)(_PCRTC_START) = (unsigned int)_fb & 0x03FFFFFF;
+  debugPrint("FB: 0x%X\n", _fb);
+#endif
+  
+  // Startup pbkit
+  pb_init();
+#ifdef GPU
+  pb_show_front_screen();
+#else
+  pb_show_debug_screen();
+#endif
+
+  initialize_screen();
+#else
+  //dup2(stdout, stderr);
+  setbuf(stdout, 0);
+  setbuf(stderr, 0);
+#endif
+
+
+#ifdef XBOX
+  // Install page fault handler and NIC interrupt handler
+  //FIXME: This assumes that the IDT is always identity mapped.
+  //       We might want to MmMapIoSpace it instead.
+  IDT idt;
+  get_idt(&idt);
+  debugPrint("IDT at 0x%x (size %d)\n", (int)idt.entries, (int)idt.length);
+  debugPrint("Replacing IDT entry 0xE: 0x%x (old)\n", (idt.entries[0xE].offset_hi << 16) | idt.entries[0xE].offset_lo);
+  uintptr_t page_fault_isr_addr = (uintptr_t)page_fault_isr;
+  idt.entries[0xE].offset_lo = page_fault_isr_addr & 0xFFFF;
+  idt.entries[0xE].offset_hi = (page_fault_isr_addr >> 16) & 0xFFFF;
+
+for(int i = 0; i <= 0x13; i++) {
+  idt.entries[i].offset_lo = page_fault_isr_addr & 0xFFFF;
+  idt.entries[i].offset_hi = (page_fault_isr_addr >> 16) & 0xFFFF;
+}
+
+#endif
+
   printf("-- Initializing\n");
   printf("Version: %s\n", APP_VERSION_STRING);
   InitializeEmulation();
@@ -4076,6 +4492,21 @@ int main(int argc, char* argv[]) {
   uint8_t* p = Memory(clearEax);
   *p++ = 0x31; *p++ = 0xC0; // xor eax, eax
   *p++ = 0xC3;              // ret
+
+  // This instruction in the webdemo causes an illegal access.
+  // It accesses 4 bytes, starting 3 bytes before the end of an allocation.
+#if 1
+  *(uint8_t*)Memory(0x44ae32+0) = 0x90;
+  *(uint8_t*)Memory(0x44ae32+1) = 0x90;
+#endif
+
+#if 1
+  //FIXME: These are for the webdemo version only
+  // Valgrind doesn't like this, so we remove the prefix
+  //   cs mov eax, eax -> mov eax, eax
+  *(uint8_t*)Memory(0x4a6421) = 0x90;
+  *(uint8_t*)Memory(0x4A63E1) = 0x90;
+#endif
 
 // 0x90 = nop (used to disable code)
 // 0xC3 = ret (used to skip function)
