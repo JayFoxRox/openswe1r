@@ -96,7 +96,7 @@ static int mouse_y = 0;
 #include <math.h>
 #include <pbkit/pbkit.h>
 #include <xboxkrnl/xboxkrnl.h>
-#include <xboxrt/debug.h>
+#include <hal/debug.h>
 
 
 #define MASK(mask, val) (((val) << (ffs(mask)-1)) & (mask))

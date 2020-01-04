@@ -35,7 +35,7 @@
 
 //FIXME: REMOVE THIS BLOCK! Only used during development
 #ifdef XBOX
-#include <xboxrt/debug.h>
+#include <hal/debug.h>
 #define XboxHackyDebugPrint(fmt, ...) \
   do { \
     char buf[4096]; \
