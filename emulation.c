@@ -31,14 +31,22 @@ static uint32_t tlsAddress = 0xB0000000; //FIXME: No idea where to put this yet
 static uint32_t tlsSize = 0x1000;
 
 static uint32_t stackAddress = 0xC0000000; // FIXME: Search free region instead..?
-static uint32_t stackSize = 16 * 1024 * 1024; // 4 MiB stack should be PLENTY
+static uint32_t stackSize = 512 * 1024; // 4 MiB stack should be PLENTY
 
-#define HEAP_ADDRESS 0x0D000000
+#define HEAP_ADDRESS 0x02000000
+//                   0x1FBEFCFE
 static uint32_t heapAddress = HEAP_ADDRESS;
-static uint32_t heapSize = 1024 * 1024 * 1024; // 1024 MiB
+static uint32_t heapSize = 100 * 1024 * 1024; // 1024 MiB
 
 static uc_engine *uc;
 static uint32_t ucAlignment = 0x1000;
+
+
+typedef struct {
+  uint32_t marker;
+  uint32_t size;
+  uint8_t data[];
+} Allocation;
 
 
 unsigned int currentThread = 0;
@@ -287,27 +295,55 @@ void* MapMemory(uint32_t address, uint32_t size, bool read, bool write, bool exe
   return memory;
 }
 
+static int allocId = 0;
+static int freeId = 0;
+static int freeCount = 0;
+static int allocCount = 0;
+
+
 Address Allocate(Size size) {
   static uint32_t address = HEAP_ADDRESS;
+
+  address += sizeof(Allocation);
+
+  //FIXME: Align?
+  address += 0xFFF;
+  address &= ~0xFFF;
+
   uint32_t ret = address;
   address += size;
-#if 1
-  // Debug memset to detect memory errors
-  memset(Memory(ret), 0xDD, size);
-#endif
-  //FIXME: Proper allocator
 
-#if 1
-//FIXME: This is a hack to fix alignment + to avoid too small allocations
-address += 0x1000;
-address &= 0xFFFFF000;
-#endif
+  int use = address - HEAP_ADDRESS;
+  printf("Heap-use: %u / %u = %u%% [%d alloc / %d free = %d]; %d bytes free'd\n", use, heapSize, use / (heapSize / 100), allocId, freeId, allocId - freeId, freeCount);
+  assert(use <= heapSize);
+
+  allocId++;
+
+  Allocation* allocation = Memory(ret - sizeof(Allocation));
+
+  // Debug memset to detect memory errors
+  memset(allocation->data, 0xDD, size);
+
+  allocation->marker = 0xDEADBEEF;
+  allocation->size = size;
 
   return ret;
 }
 
 void Free(Address address) {
-  //FIXME!
+  //FIXME: Actually free memory..
+
+  Allocation* allocation = Memory(address - sizeof(Allocation));
+
+  // Check marker and flag region as unused
+  assert(allocation->marker == 0xDEADBEEF);
+  allocation->marker = 0xDEADC0DE;
+
+  // Debug memset to detect memory errors
+  memset(allocation->data, 0x55, allocation->size);
+
+  freeCount += allocation->size;
+  freeId++;
 }
 
 void* Memory(uint32_t address) {
@@ -550,7 +586,7 @@ unsigned int CreateEmulatedThread(uint32_t eip) {
     stack = MapMemory(stackAddress, stackSize, true, true, false);
   }
   static int threadId = 0;
-  uint32_t esp = stackAddress + stackSize / 2 + 256 * 1024 * threadId++; // 256 kiB per late thread
+  uint32_t esp = stackAddress + stackSize; // 256 kiB per late thread
   assert(threadId < 4);
 
   threads = realloc(threads, ++threadCount * sizeof(ThreadContext));
@@ -632,6 +668,11 @@ void RunEmulation() {
 
       //Hack: Manually transfers EIP (might have been changed in callback)
       uc_reg_read(uc, UC_X86_REG_EIP, &ctx->eip);
+
+      uc_reg_read(uc, UC_X86_REG_ESP, &ctx->esp);
+
+      int away = stackSize - (ctx->esp - stackAddress);
+      printf("Stack-use: %d / %d = %d\n", away, stackSize, away / (stackSize / 100));
     }
 
     // threads array might be relocated if a thread was modified in a callback; update ctx pointer
