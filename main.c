@@ -4351,6 +4351,17 @@ int main(int argc, char* argv[]) {
   // Set display mode (16bpp to save memory)
   //FIXME: Temporarily switched to 32bpp, as I got weird issues at 16bpp
   XVideoSetMode(640, 480, 32, REFRESH_DEFAULT); 
+
+#if 1
+  // We consume a lot of memory, so we need to claim the framebuffer
+  size_t fb_size = 640 * 480 * 4;
+  extern uint8_t* _fb;
+  _fb = (uint8_t*)MmAllocateContiguousMemoryEx(fb_size, 0, 0xFFFFFFFF, 0x1000, PAGE_READWRITE | PAGE_WRITECOMBINE);
+  memset(_fb, 0x00, fb_size);
+#define _PCRTC_START				0xFD600800
+  *(unsigned int*)(_PCRTC_START) = (unsigned int)_fb & 0x03FFFFFF;
+  debugPrint("FB: 0x%X\n", _fb);
+#endif
   
   // Startup pbkit
   pb_init();
