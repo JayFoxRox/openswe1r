@@ -1,11 +1,21 @@
 [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/OpenSWE1R)       [![CLA assistant](https://cla-assistant.io/readme/badge/OpenSWE1R/openswe1r)](https://cla-assistant.io/OpenSWE1R/openswe1r)       [![Travis build Status](https://travis-ci.org/OpenSWE1R/openswe1r.svg?branch=master)](https://travis-ci.org/OpenSWE1R/openswe1r)       [![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/4fixwemedrccktt3/branch/master?svg=true)](https://ci.appveyor.com/project/OpenSWE1R/openswe1r/branch/master)
 
+[![Gitter Chat](https://img.shields.io/badge/Gitter-Chat-blue.svg?style=for-the-badge)]()
+[![Bugs](https://img.shields.io/github/issues-raw/OpenSWE1R/openswe1r/bug.svg?style=for-the-badge&label=Known%20Bugs)]()
+[![AppVeyor CI](https://img.shields.io/appveyor/ci/JayFoxRox82949/openswe1r/master.svg?style=for-the-badge&label=AppVeyor%20CI)]()
+[![Travis CI](https://img.shields.io/travis/OpenSWE1R/openswe1r/master.svg?style=for-the-badge&label=Travis%20CI)]()
+
 ---
 
 ### OpenSWE1R
 *An Open-Source port of the 1999 Game ["Star Wars: Episode 1 Racer"](https://en.wikipedia.org/wiki/Star_Wars_Episode_I:_Racer)*
 
-![Screenshot of OpenSWE1R running on Linux](https://i.imgur.com/LAqHPgh.png)
+[![Screenshot of OpenSWE1R running on Linux](http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar)](#ref)
+
+
+<p align="center"><img src="http://jannikvogel.de/scratchpad/svg-slideshow/out.svg?bar" alt="alt text"></p>
+
+![4k](https://4.bp.blogspot.com/-BHmsCqbWCQ4/VjCwAbFeWSI/AAAAAAAB3gA/ZlGhBPuRs7E/s0/Best_Autumn_Picture_2015_uhd.jpg)
 
 ### Details
 
